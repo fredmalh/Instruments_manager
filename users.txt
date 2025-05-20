@@ -1,0 +1,13 @@
+Default users are set up as follows:
+
+Administrators:
+Username: admin1, Password: admin123
+Username: admin2, Password: admin456
+
+Normal Users:
+Username: user1, Password: user123
+Username: user2, Password: user456
+Username: user3, Password: user789
+
+
+Username: user4, Password: user444
