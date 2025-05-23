@@ -1,13 +1,14 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                             QPushButton, QTableWidget, QTableWidgetItem, QLabel,
                             QMessageBox, QDialog, QLineEdit, QFormLayout, QComboBox,
-                            QTextEdit, QSplitter, QHeaderView, QTableView)
+                            QTextEdit, QSplitter, QHeaderView, QTableView, QScrollArea,
+                            QMainWindow, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex
 from PyQt6.QtGui import QFont
 from database import Database
 from datetime import datetime
 
-class InstrumentDetailsDialog(QDialog):
+class InstrumentDetailsDialog(QMainWindow):
     def __init__(self, instrument_id, user_id, is_admin, parent=None):
         super().__init__(parent)
         self.instrument_id = instrument_id
@@ -18,27 +19,51 @@ class InstrumentDetailsDialog(QDialog):
 
     def init_ui(self):
         self.setWindowTitle('Instrument Details')
-        self.setGeometry(100, 100, 800, 600)
+        self.setMinimumSize(800, 600)
+        
+        # Enable window resizing
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setWindowState(Qt.WindowState.WindowActive)
+        
+        # Create central widget and main layout
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        layout = QVBoxLayout(central_widget)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
 
         # Get instrument details
-        details = self.db.get_instrument_details(self.instrument_id)
+        cursor = self.db.conn.cursor()
+        cursor.execute("""
+            SELECT 
+                i.name,
+                i.model,
+                i.serial_number,
+                i.location,
+                i.status,
+                i.manufacturer,
+                i.purchase_date,
+                i.last_calibration,
+                i.next_calibration,
+                i.notes,
+                u.username as responsible_user
+            FROM instruments i
+            LEFT JOIN users u ON i.responsible_user_id = u.id
+            WHERE i.id = ?
+        """, (self.instrument_id,))
+        details = cursor.fetchone()
+
         if not details:
             QMessageBox.critical(self, 'Error', 'Could not load instrument details')
-            self.reject()
+            self.close()
             return
 
-        instrument = details['instrument']
-        maintenance_schedule = details['maintenance_schedule']
-        maintenance_history = details['maintenance_history']
-
-        layout = QVBoxLayout(self)
-
         # Title
-        title = QLabel(f"Instrument Details: {instrument[1]}")  # instrument[1] is name
+        title = QLabel(f"Instrument Details: {details[0]}")
         title.setFont(QFont('Arial', 16, QFont.Weight.Bold))
         layout.addWidget(title)
 
-        # Create splitter for details and maintenance
+        # Create splitter for details and history
         splitter = QSplitter(Qt.Orientation.Vertical)
         layout.addWidget(splitter)
 
@@ -46,37 +71,24 @@ class InstrumentDetailsDialog(QDialog):
         details_widget = QWidget()
         details_layout = QFormLayout(details_widget)
         
-        details_layout.addRow('Model:', QLabel(instrument[2]))
-        details_layout.addRow('Serial Number:', QLabel(instrument[3]))
-        details_layout.addRow('Location:', QLabel(instrument[4]))
-        details_layout.addRow('Status:', QLabel(instrument[5]))
-        details_layout.addRow('Brand:', QLabel(instrument[6]))
-        details_layout.addRow('Responsible User:', QLabel(instrument[8]))  # responsible_user from join
+        # Add all details with proper labels
+        details_layout.addRow('Name:', QLabel(details[0]))
+        details_layout.addRow('Model:', QLabel(details[1]))
+        details_layout.addRow('Serial Number:', QLabel(details[2]))
+        details_layout.addRow('Location:', QLabel(details[3]))
+        details_layout.addRow('Status:', QLabel(details[4]))
+        details_layout.addRow('Manufacturer:', QLabel(details[5]))
+        details_layout.addRow('Purchase Date:', QLabel(details[6]))
+        details_layout.addRow('Last Calibration:', QLabel(details[7]))
+        details_layout.addRow('Next Calibration:', QLabel(details[8]))
+        details_layout.addRow('Notes:', QLabel(details[9]))
+        details_layout.addRow('Responsible User:', QLabel(details[10]))
 
-        splitter.addWidget(details_widget)
-
-        # Maintenance schedule section
-        schedule_widget = QWidget()
-        schedule_layout = QVBoxLayout(schedule_widget)
-        
-        schedule_title = QLabel('Maintenance Schedule')
-        schedule_title.setFont(QFont('Arial', 12, QFont.Weight.Bold))
-        schedule_layout.addWidget(schedule_title)
-
-        schedule_table = QTableWidget()
-        schedule_table.setColumnCount(4)
-        schedule_table.setHorizontalHeaderLabels(['Type', 'Period (days)', 'Last Maintenance', 'Next Maintenance'])
-        schedule_table.setRowCount(len(maintenance_schedule))
-
-        for row, schedule in enumerate(maintenance_schedule):
-            for col, value in enumerate(schedule):
-                item = QTableWidgetItem(str(value))
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                schedule_table.setItem(row, col, item)
-
-        schedule_table.resizeColumnsToContents()
-        schedule_layout.addWidget(schedule_table)
-        splitter.addWidget(schedule_widget)
+        # Make the details section scrollable
+        details_scroll = QScrollArea()
+        details_scroll.setWidget(details_widget)
+        details_scroll.setWidgetResizable(True)
+        splitter.addWidget(details_scroll)
 
         # Maintenance history section
         history_widget = QWidget()
@@ -86,12 +98,24 @@ class InstrumentDetailsDialog(QDialog):
         history_title.setFont(QFont('Arial', 12, QFont.Weight.Bold))
         history_layout.addWidget(history_title)
 
-        history_table = QTableWidget()
-        history_table.setColumnCount(4)
-        history_table.setHorizontalHeaderLabels(['Date', 'Type', 'Performed By', 'Notes'])
-        history_table.setRowCount(len(maintenance_history))
+        cursor.execute("""
+            SELECT 
+                mr.maintenance_date,
+                u.username as performed_by,
+                mr.notes
+            FROM maintenance_records mr
+            JOIN users u ON mr.performed_by = u.id
+            WHERE mr.instrument_id = ?
+            ORDER BY mr.maintenance_date DESC
+        """, (self.instrument_id,))
+        history = cursor.fetchall()
 
-        for row, record in enumerate(maintenance_history):
+        history_table = QTableWidget()
+        history_table.setColumnCount(3)
+        history_table.setHorizontalHeaderLabels(['Date', 'Performed By', 'Notes'])
+        history_table.setRowCount(len(history))
+
+        for row, record in enumerate(history):
             for col, value in enumerate(record):
                 item = QTableWidgetItem(str(value))
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -101,32 +125,26 @@ class InstrumentDetailsDialog(QDialog):
         history_layout.addWidget(history_table)
         splitter.addWidget(history_widget)
 
+        # Set initial splitter sizes
+        splitter.setSizes([300, 300])
+
         # Buttons
         button_layout = QHBoxLayout()
         
-        if self.is_admin:
-            edit_button = QPushButton('Edit Instrument')
-            edit_button.clicked.connect(self.edit_instrument)
-            button_layout.addWidget(edit_button)
-
         add_maintenance_button = QPushButton('Add Maintenance Record')
         add_maintenance_button.clicked.connect(self.add_maintenance)
         button_layout.addWidget(add_maintenance_button)
 
         close_button = QPushButton('Close')
-        close_button.clicked.connect(self.accept)
+        close_button.clicked.connect(self.close)
         button_layout.addWidget(close_button)
 
         layout.addLayout(button_layout)
 
-    def edit_instrument(self):
-        # TODO: Implement edit functionality
-        QMessageBox.information(self, 'Coming Soon', 'Edit functionality will be implemented soon.')
-
     def add_maintenance(self):
         dialog = AddMaintenanceDialog(self.instrument_id, self.user_id, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.accept()  # Close details dialog to refresh data
+            self.close()  # Close details window to refresh data
 
 class AddMaintenanceDialog(QDialog):
     def __init__(self, instrument_id, user_id, parent=None):
@@ -411,8 +429,8 @@ class InstrumentsWindow(QWidget):
         if selected_row >= 0:
             instrument_id = int(self.table.item(selected_row, 0).text())
             dialog = InstrumentDetailsDialog(instrument_id, self.user_id, self.is_admin, self)
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                self.load_instruments()
+            dialog.show()  # Changed from exec() to show()
+            # Note: We don't need to check the result since it's a non-modal window
 
     def add_instrument(self):
         # TODO: Implement add functionality

@@ -101,6 +101,11 @@ class UserDialog(QDialog):
 
             self.db.conn.commit()
             self.accept()
+            
+            # Force refresh of parent window's table
+            if isinstance(self.parent(), UsersWindow):
+                self.parent().load_users()
+                
         except Exception as e:
             QMessageBox.warning(self, 'Error', str(e))
             self.db.conn.rollback()  # Rollback on error
@@ -169,6 +174,9 @@ class UsersWindow(QWidget):
         layout.setSpacing(10)
         layout.setContentsMargins(10, 10, 10, 10)
 
+        # Set minimum size before creating widgets
+        self.setMinimumSize(800, 600)
+
         # Title
         title = QLabel('User Management')
         title.setFont(QFont('Arial', 16, QFont.Weight.Bold))
@@ -198,18 +206,15 @@ class UsersWindow(QWidget):
         if self.is_admin:
             self.add_button = QPushButton('Add User')
             self.add_button.clicked.connect(self.add_user)
-            button_width = self.width() // 4
-            self.add_button.setFixedWidth(button_width)
+            self.add_button.setFixedWidth(200)  # Initial fixed width
 
         refresh_button = QPushButton('Refresh')
         refresh_button.clicked.connect(self.load_users)
-        button_width = self.width() // 4
-        refresh_button.setFixedWidth(button_width)
+        refresh_button.setFixedWidth(200)  # Initial fixed width
 
         back_button = QPushButton('Back to Main Menu')
         back_button.clicked.connect(self.back_signal.emit)
-        button_width = self.width() // 4
-        back_button.setFixedWidth(button_width)
+        back_button.setFixedWidth(200)  # Initial fixed width
 
         # Add buttons to layout with proper spacing
         bottom_layout.addStretch()
@@ -227,8 +232,6 @@ class UsersWindow(QWidget):
         button_width = self.width() // 4
         for button in self.findChildren(QPushButton):
             button.setFixedWidth(button_width)
-        # Ensure minimum size
-        self.setMinimumSize(800, 600)
 
     def load_users(self):
         cursor = self.db.conn.cursor()

@@ -209,11 +209,10 @@ class Database:
         if cursor.fetchone()[0] == 0:
             # Add default maintenance types
             maintenance_types = [
-                ('Daily Check', 'Basic daily inspection and cleaning'),
-                ('Weekly Maintenance', 'Weekly maintenance and calibration'),
-                ('Monthly Service', 'Monthly deep cleaning and service'),
-                ('Quarterly Calibration', 'Quarterly calibration and adjustment'),
-                ('Annual Service', 'Annual comprehensive service and certification')
+                ('Cleaning', 'Inspection and cleaning'),
+                ('Calibration', 'Maintenance and calibration'),
+                ('Battery test', 'Battery test'),
+                ('Battery replacement', 'Battery replacement')
             ]
             
             cursor.executemany(
@@ -226,26 +225,26 @@ class Database:
         if cursor.fetchone()[0] == 0:
             # Add dummy instruments with responsible users
             dummy_instruments = [
-                ('Microscope Olympus BX53', 'BX53', 'OLY-2023-001', 'Lab 101', 'Operational', 'Olympus', 3, '15-05-2025', 4, 13, None, None, None, None),
-                ('Centrifuge Eppendorf 5810R', '5810R', 'EPP-2023-002', 'Lab 101', 'Operational', 'Eppendorf', 3, '15-05-2025', 3, 4, 4, 13, 5, 52),
-                ('PCR Machine Bio-Rad T100', 'T100', 'BIO-2023-003', 'Lab 102', 'Operational', 'Bio-Rad', 3, '15-05-2025', 4, 13, None, None, None, None),
-                ('Autoclave Tuttnauer 2540M', '2540M', 'TUT-2023-004', 'Lab 103', 'Operational', 'Tuttnauer', 3, '15-05-2025', 4, 13, None, None, None, None),
-                ('pH Meter Mettler Toledo', 'SevenCompact', 'MET-2023-005', 'Lab 101', 'Operational', 'Mettler Toledo', 3, '15-05-2025', 4, 13, None, None, None, None),
-                ('Incubator Memmert IN55', 'IN55', 'MEM-2023-006', 'Lab 102', 'Operational', 'Memmert', 3, '15-05-2025', 4, 13, None, None, None, None),
-                ('Spectrophotometer Thermo Scientific', 'GENESYS 150', 'THE-2023-007', 'Lab 103', 'Operational', 'Thermo Scientific', 4, '15-05-2025', 3, 4, 4, 13, 5, 52),
-                ('Water Purification System Milli-Q', 'Advantage A10', 'MIL-2023-008', 'Lab 101', 'Operational', 'Merck', 4, '15-05-2025', 4, 13, None, None, None, None),
-                ('Freezer -80°C Thermo Scientific', 'ULT-1386-3-V', 'THE-2023-009', 'Lab 104', 'Operational', 'Thermo Scientific', 4, '15-05-2025', 4, 13, None, None, None, None),
-                ('Laminar Flow Hood Esco', 'Airstream AC2-4S1', 'ESC-2023-010', 'Lab 102', 'Operational', 'Esco', 4, '15-05-2025', 4, 13, 5, 52, None, None),
-                ('Vortex Mixer IKA', 'MS 3 digital', 'IKA-2023-011', 'Lab 101', 'Operational', 'IKA', 4, '15-05-2025', 4, 13, 5, 52, None, None),
-                ('Magnetic Stirrer IKA', 'RCT basic', 'IKA-2023-012', 'Lab 101', 'Operational', 'IKA', 4, '15-05-2025', 4, 13, None, None, None, None),
-                ('Hot Plate Corning', 'PC-420D', 'COR-2023-013', 'Lab 102', 'Operational', 'Corning', 5, '15-05-2025', 4, 13, None, None, None, None),
-                ('Microplate Reader BioTek', 'Synergy H1', 'BIO-2023-014', 'Lab 103', 'Operational', 'BioTek', 5, '15-05-2025', 3, 4, 4, 13, 5, 52),
-                ('Gel Documentation System Bio-Rad', 'ChemiDoc MP', 'BIO-2023-015', 'Lab 102', 'Operational', 'Bio-Rad', 5, '15-05-2025', 3, 4, 4, 13, 5, 52),
-                ('CO2 Incubator Thermo Scientific', 'Heracell 150i', 'THE-2023-016', 'Lab 104', 'Operational', 'Thermo Scientific', 5, '15-05-2025', 4, 13, None, None, None, None),
-                ('Shaker Incubator New Brunswick', 'Innova 42', 'NEW-2023-017', 'Lab 102', 'Operational', 'New Brunswick', 5, '15-05-2025', 4, 13, None, None, None, None),
-                ('Ultrasonic Cleaner Branson', 'CPXH', 'BRA-2023-018', 'Lab 103', 'Operational', 'Branson', 5, '15-05-2025', 5, 52, None, None, None, None),
-                ('Microbalance Mettler Toledo', 'XS205', 'MET-2023-019', 'Lab 101', 'Operational', 'Mettler Toledo', 5, '15-05-2025', 5, 52, None, None, None, None),
-                ('Refrigerator Thermo Scientific', 'TSX400', 'THE-2023-020', 'Lab 104', 'Operational', 'Thermo Scientific', 5, '15-05-2025', 4, 13, None, None, None, None)
+                ('Microscope Olympus BX53', 'BX53', 'OLY-2023-001', 'Lab 101', 'Operational', 'Olympus', 3, '15-05-2025', 1, 13, None, None, None, None),
+                ('Centrifuge Eppendorf 5810R', '5810R', 'EPP-2023-002', 'Lab 101', 'Operational', 'Eppendorf', 3, '15-05-2025', 1, 4, 2, 13, 3, 52),
+                ('PCR Machine Bio-Rad T100', 'T100', 'BIO-2023-003', 'Lab 102', 'Operational', 'Bio-Rad', 3, '15-05-2025', 1, 13, None, None, None, None),
+                ('Autoclave Tuttnauer 2540M', '2540M', 'TUT-2023-004', 'Lab 103', 'Operational', 'Tuttnauer', 3, '15-05-2025', 2, 13, None, None, None, None),
+                ('pH Meter Mettler Toledo', 'SevenCompact', 'MET-2023-005', 'Lab 101', 'Operational', 'Mettler Toledo', 3, '15-05-2025', 2, 13, None, None, None, None),
+                ('Incubator Memmert IN55', 'IN55', 'MEM-2023-006', 'Lab 102', 'Operational', 'Memmert', 3, '15-05-2025', 2, 13, None, None, None, None),
+                ('Spectrophotometer Thermo Scientific', 'GENESYS 150', 'THE-2023-007', 'Lab 103', 'Operational', 'Thermo Scientific', 4, '15-05-2025', 1, 4, 2, 13, 3, 52),
+                ('Water Purification System Milli-Q', 'Advantage A10', 'MIL-2023-008', 'Lab 101', 'Operational', 'Merck', 4, '15-05-2025', 2, 13, None, None, None, None),
+                ('Freezer -80°C Thermo Scientific', 'ULT-1386-3-V', 'THE-2023-009', 'Lab 104', 'Operational', 'Thermo Scientific', 4, '15-05-2025', 2, 13, None, None, None, None),
+                ('Laminar Flow Hood Esco', 'Airstream AC2-4S1', 'ESC-2023-010', 'Lab 102', 'Operational', 'Esco', 4, '15-05-2025', 2, 13, 3, 52, None, None),
+                ('Vortex Mixer IKA', 'MS 3 digital', 'IKA-2023-011', 'Lab 101', 'Operational', 'IKA', 4, '15-05-2025', 2, 13, 3, 52, None, None),
+                ('Magnetic Stirrer IKA', 'RCT basic', 'IKA-2023-012', 'Lab 101', 'Operational', 'IKA', 4, '15-05-2025', 2, 13, None, None, None, None),
+                ('Hot Plate Corning', 'PC-420D', 'COR-2023-013', 'Lab 102', 'Operational', 'Corning', 5, '15-05-2025', 2, 13, None, None, None, None),
+                ('Microplate Reader BioTek', 'Synergy H1', 'BIO-2023-014', 'Lab 103', 'Operational', 'BioTek', 5, '15-05-2025', 1, 4, 2, 13, 3, 52),
+                ('Gel Documentation System Bio-Rad', 'ChemiDoc MP', 'BIO-2023-015', 'Lab 102', 'Operational', 'Bio-Rad', 5, '15-05-2025', 1, 4, 2, 13, 3, 52),
+                ('CO2 Incubator Thermo Scientific', 'Heracell 150i', 'THE-2023-016', 'Lab 104', 'Operational', 'Thermo Scientific', 5, '15-05-2025', 2, 13, None, None, None, None),
+                ('Shaker Incubator New Brunswick', 'Innova 42', 'NEW-2023-017', 'Lab 102', 'Operational', 'New Brunswick', 5, '15-05-2025', 2, 13, None, None, None, None),
+                ('Ultrasonic Cleaner Branson', 'CPXH', 'BRA-2023-018', 'Lab 103', 'Operational', 'Branson', 5, '15-05-2025', 2, 52, None, None, None, None),
+                ('Microbalance Mettler Toledo', 'XS205', 'MET-2023-019', 'Lab 101', 'Operational', 'Mettler Toledo', 5, '15-05-2025', 2, 52, None, None, None, None),
+                ('Refrigerator Thermo Scientific', 'TSX400', 'THE-2023-020', 'Lab 104', 'Operational', 'Thermo Scientific', 5, '15-05-2025', 2, 13, None, None, None, None)
             ]
             
             cursor.executemany(

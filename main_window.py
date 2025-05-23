@@ -55,8 +55,9 @@ class AddInstrumentDialog(QDialog):
 
     def init_ui(self):
         self.setWindowTitle('Add New Instrument')
-        self.setFixedSize(500, 600)
-
+        self.setMinimumSize(500, 600)  # Set minimum size instead of fixed size
+        
+        # Create main layout
         layout = QFormLayout(self)
         layout.setSpacing(10)
 
@@ -173,6 +174,15 @@ class AddInstrumentDialog(QDialog):
             return
 
         try:
+            # Validate date format
+            try:
+                # Convert DD-MM-YYYY to YYYY-MM-DD for SQLite
+                day, month, year = date_start.split('-')
+                date_start = f"{year}-{month}-{day}"
+            except ValueError:
+                QMessageBox.warning(self, 'Error', 'Please enter date in DD-MM-YYYY format')
+                return
+
             # Start transaction
             cursor = self.db.conn.cursor()
             
@@ -192,6 +202,40 @@ class AddInstrumentDialog(QDialog):
                 maint_type2, period2 if period2 else None,
                 maint_type3, period3 if period3 else None
             ))
+            
+            # Get the ID of the newly inserted instrument
+            instrument_id = cursor.lastrowid
+            
+            # Add initial maintenance records for each maintenance type
+            if maint_type1 and period1:
+                cursor.execute("""
+                    INSERT INTO maintenance_records (
+                        instrument_id, maintenance_type_id, performed_by, 
+                        maintenance_date, notes
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                """, (instrument_id, maint_type1, responsible_user_id, date_start, 
+                      "Initial maintenance record - instrument start date"))
+            
+            if maint_type2 and period2:
+                cursor.execute("""
+                    INSERT INTO maintenance_records (
+                        instrument_id, maintenance_type_id, performed_by, 
+                        maintenance_date, notes
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                """, (instrument_id, maint_type2, responsible_user_id, date_start, 
+                      "Initial maintenance record - instrument start date"))
+            
+            if maint_type3 and period3:
+                cursor.execute("""
+                    INSERT INTO maintenance_records (
+                        instrument_id, maintenance_type_id, performed_by, 
+                        maintenance_date, notes
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                """, (instrument_id, maint_type3, responsible_user_id, date_start, 
+                      "Initial maintenance record - instrument start date"))
             
             self.db.conn.commit()
             self.accept()
@@ -256,7 +300,7 @@ class AddMaintenanceDialog(QDialog):
         except Exception as e:
             QMessageBox.warning(self, 'Error', str(e))
 
-class InstrumentDetailsDialog(QDialog):
+class InstrumentDetailsDialog(QMainWindow):
     def __init__(self, instrument_id, parent=None):
         super().__init__(parent)
         self.db = parent.db if parent else Database()
@@ -266,10 +310,14 @@ class InstrumentDetailsDialog(QDialog):
         self.init_ui()
         self.apply_dark_theme()
         self.load_instrument_data()
+        self.set_edit_mode(False)  # Start in read-only mode
 
     def apply_dark_theme(self):
         self.setStyleSheet("""
-            QDialog {
+            QMainWindow {
+                background-color: #1e1e1e;
+            }
+            QWidget {
                 background-color: #1e1e1e;
                 color: #ffffff;
             }
@@ -324,31 +372,88 @@ class InstrumentDetailsDialog(QDialog):
 
     def init_ui(self):
         self.setWindowTitle('Instrument Details')
-        self.setFixedSize(800, 600)
-
-        layout = QVBoxLayout(self)
+        self.setMinimumSize(800, 600)
+        
+        # Create central widget and main layout
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        layout = QVBoxLayout(central_widget)
         layout.setSpacing(10)
 
         # Basic Information Group
         basic_group = QGroupBox("Basic Information")
         basic_layout = QFormLayout()
-        self.name_label = QLabel()
-        self.model_label = QLabel()
-        self.serial_label = QLabel()
-        self.location_label = QLabel()
-        self.brand_label = QLabel()
-        self.status_label = QLabel()
-        self.responsible_label = QLabel()
+        
+        # Create input fields instead of labels
+        self.name_input = QLineEdit()
+        self.model_input = QLineEdit()
+        self.serial_input = QLineEdit()
+        self.location_input = QLineEdit()
+        self.brand_input = QLineEdit()
+        self.status_input = QComboBox()
+        self.status_input.addItems(['Operational', 'Maintenance', 'Out of Service'])
+        self.responsible_user = QComboBox()
+        self.date_start_input = QLineEdit()
+        self.date_start_input.setPlaceholderText("DD-MM-YYYY")
 
-        basic_layout.addRow('Name:', self.name_label)
-        basic_layout.addRow('Model:', self.model_label)
-        basic_layout.addRow('Serial Number:', self.serial_label)
-        basic_layout.addRow('Location:', self.location_label)
-        basic_layout.addRow('Brand:', self.brand_label)
-        basic_layout.addRow('Status:', self.status_label)
-        basic_layout.addRow('Responsible User:', self.responsible_label)
+        # Load users for responsible user dropdown
+        cursor = self.db.conn.cursor()
+        cursor.execute("SELECT id, username FROM users ORDER BY username")
+        users = cursor.fetchall()
+        for user_id, username in users:
+            self.responsible_user.addItem(username, user_id)
+
+        basic_layout.addRow('Name:', self.name_input)
+        basic_layout.addRow('Model:', self.model_input)
+        basic_layout.addRow('Serial Number:', self.serial_input)
+        basic_layout.addRow('Location:', self.location_input)
+        basic_layout.addRow('Brand:', self.brand_input)
+        basic_layout.addRow('Status:', self.status_input)
+        basic_layout.addRow('Responsible User:', self.responsible_user)
+        basic_layout.addRow('Date Start Operating:', self.date_start_input)
         basic_group.setLayout(basic_layout)
         layout.addWidget(basic_group)
+
+        # Maintenance Configuration Group
+        maintenance_config_group = QGroupBox("Maintenance Configuration")
+        maintenance_config_layout = QFormLayout()
+
+        # Create maintenance type and period inputs
+        self.maintenance_type1 = QComboBox()
+        self.maintenance_type2 = QComboBox()
+        self.maintenance_type3 = QComboBox()
+        self.period1_input = QLineEdit()
+        self.period2_input = QLineEdit()
+        self.period3_input = QLineEdit()
+        
+        # Set placeholders for period inputs
+        self.period1_input.setPlaceholderText("Weeks between maintenance")
+        self.period2_input.setPlaceholderText("Weeks between maintenance")
+        self.period3_input.setPlaceholderText("Weeks between maintenance")
+
+        # Load maintenance types
+        cursor.execute("SELECT id, name FROM maintenance_types ORDER BY name")
+        maintenance_types = cursor.fetchall()
+        for maint_id, maint_name in maintenance_types:
+            self.maintenance_type1.addItem(maint_name, maint_id)
+            self.maintenance_type2.addItem(maint_name, maint_id)
+            self.maintenance_type3.addItem(maint_name, maint_id)
+        
+        # Add "None" option to maintenance types 2 and 3
+        self.maintenance_type2.insertItem(0, "None", None)
+        self.maintenance_type3.insertItem(0, "None", None)
+        self.maintenance_type2.setCurrentIndex(0)
+        self.maintenance_type3.setCurrentIndex(0)
+
+        maintenance_config_layout.addRow('Maintenance Type 1:', self.maintenance_type1)
+        maintenance_config_layout.addRow('Period 1 (weeks):', self.period1_input)
+        maintenance_config_layout.addRow('Maintenance Type 2:', self.maintenance_type2)
+        maintenance_config_layout.addRow('Period 2 (weeks):', self.period2_input)
+        maintenance_config_layout.addRow('Maintenance Type 3:', self.maintenance_type3)
+        maintenance_config_layout.addRow('Period 3 (weeks):', self.period3_input)
+        
+        maintenance_config_group.setLayout(maintenance_config_layout)
+        layout.addWidget(maintenance_config_group)
 
         # Maintenance Schedule Group
         schedule_group = QGroupBox("Maintenance Schedule")
@@ -363,29 +468,7 @@ class InstrumentDetailsDialog(QDialog):
         self.schedule_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.schedule_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.schedule_table.setAlternatingRowColors(True)
-        self.schedule_table.setStyleSheet("""
-            QTableWidget {
-                background-color: #2d2d2d;
-                color: #ffffff;
-                gridline-color: #3d3d3d;
-                border: 1px solid #3d3d3d;
-            }
-            QTableWidget::item {
-                padding: 5px;
-            }
-            QTableWidget::item:selected {
-                background-color: #0d47a1;
-            }
-            QTableWidget::item:alternate {
-                background-color: #252525;
-            }
-            QHeaderView::section {
-                background-color: #2d2d2d;
-                color: #ffffff;
-                padding: 5px;
-                border: 1px solid #3d3d3d;
-            }
-        """)
+        self.schedule_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)  # Make table read-only by default
         schedule_layout.addWidget(self.schedule_table)
         schedule_group.setLayout(schedule_layout)
         layout.addWidget(schedule_group)
@@ -403,35 +486,16 @@ class InstrumentDetailsDialog(QDialog):
         self.history_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.history_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.history_table.setAlternatingRowColors(True)
-        self.history_table.setStyleSheet("""
-            QTableWidget {
-                background-color: #2d2d2d;
-                color: #ffffff;
-                gridline-color: #3d3d3d;
-                border: 1px solid #3d3d3d;
-            }
-            QTableWidget::item {
-                padding: 5px;
-            }
-            QTableWidget::item:selected {
-                background-color: #0d47a1;
-            }
-            QTableWidget::item:alternate {
-                background-color: #252525;
-            }
-            QHeaderView::section {
-                background-color: #2d2d2d;
-                color: #ffffff;
-                padding: 5px;
-                border: 1px solid #3d3d3d;
-            }
-        """)
+        self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)  # Make table read-only by default
         history_layout.addWidget(self.history_table)
         history_group.setLayout(history_layout)
         layout.addWidget(history_group)
 
         # Buttons
         buttons_layout = QHBoxLayout()
+        self.edit_button = QPushButton('Edit Data')
+        self.save_button = QPushButton('Save Changes')
+        self.cancel_button = QPushButton('Cancel')
         add_maintenance_button = QPushButton('Add Maintenance Record')
         close_button = QPushButton('Close')
 
@@ -439,22 +503,123 @@ class InstrumentDetailsDialog(QDialog):
         if self.is_admin or self.is_responsible_user():
             add_maintenance_button.clicked.connect(self.add_maintenance)
             buttons_layout.addWidget(add_maintenance_button)
-        close_button.clicked.connect(self.accept)
+
+        self.edit_button.clicked.connect(lambda: self.set_edit_mode(True))
+        self.save_button.clicked.connect(self.save_changes)
+        self.cancel_button.clicked.connect(lambda: self.set_edit_mode(False))
+        close_button.clicked.connect(self.close)
+
+        buttons_layout.addWidget(self.edit_button)
+        buttons_layout.addWidget(self.save_button)
+        buttons_layout.addWidget(self.cancel_button)
         buttons_layout.addWidget(close_button)
         layout.addLayout(buttons_layout)
 
-    def is_responsible_user(self):
+    def set_edit_mode(self, edit_mode):
+        # Enable/disable editing of fields
+        self.name_input.setReadOnly(not edit_mode)
+        self.model_input.setReadOnly(not edit_mode)
+        self.serial_input.setReadOnly(not edit_mode)
+        self.location_input.setReadOnly(not edit_mode)
+        self.brand_input.setReadOnly(not edit_mode)
+        self.status_input.setEnabled(edit_mode)
+        self.responsible_user.setEnabled(edit_mode)
+        self.date_start_input.setReadOnly(not edit_mode)
+        
+        # Enable/disable maintenance configuration
+        self.maintenance_type1.setEnabled(edit_mode)
+        self.maintenance_type2.setEnabled(edit_mode)
+        self.maintenance_type3.setEnabled(edit_mode)
+        self.period1_input.setReadOnly(not edit_mode)
+        self.period2_input.setReadOnly(not edit_mode)
+        self.period3_input.setReadOnly(not edit_mode)
+
+        # Set table edit triggers based on edit mode
+        if edit_mode:
+            self.schedule_table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
+            self.history_table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
+        else:
+            self.schedule_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        # Show/hide appropriate buttons
+        self.edit_button.setVisible(not edit_mode)
+        self.save_button.setVisible(edit_mode)
+        self.cancel_button.setVisible(edit_mode)
+
+    def save_changes(self):
         try:
+            # Get current values
+            name = self.name_input.text().strip()
+            model = self.model_input.text().strip()
+            serial = self.serial_input.text().strip()
+            location = self.location_input.text().strip()
+            brand = self.brand_input.text().strip()
+            status = self.status_input.currentText()
+            responsible_user_id = self.responsible_user.currentData()
+            date_start = self.date_start_input.text().strip()
+            
+            # Get maintenance types and periods
+            maint_type1 = self.maintenance_type1.currentData()
+            maint_type2 = self.maintenance_type2.currentData()
+            maint_type3 = self.maintenance_type3.currentData()
+            period1 = self.period1_input.text().strip()
+            period2 = self.period2_input.text().strip()
+            period3 = self.period3_input.text().strip()
+
+            # Validate required fields
+            if not all([name, model, serial, location, brand, date_start]):
+                QMessageBox.warning(self, 'Error', 'Please fill all required fields')
+                return
+
+            # Validate date format
+            try:
+                # Convert DD-MM-YYYY to YYYY-MM-DD for SQLite
+                day, month, year = date_start.split('-')
+                date_start = f"{year}-{month}-{day}"
+            except ValueError:
+                QMessageBox.warning(self, 'Error', 'Please enter date in DD-MM-YYYY format')
+                return
+
+            # Validate maintenance periods
+            try:
+                if period1:
+                    period1 = int(period1)
+                if period2:
+                    period2 = int(period2)
+                if period3:
+                    period3 = int(period3)
+            except ValueError:
+                QMessageBox.warning(self, 'Error', 'Please enter valid numbers for maintenance periods')
+                return
+
+            # Update database
             cursor = self.db.conn.cursor()
             cursor.execute("""
-                SELECT responsible_user_id 
-                FROM instruments 
+                UPDATE instruments 
+                SET name = ?, model = ?, serial_number = ?, location = ?, 
+                    brand = ?, status = ?, responsible_user_id = ?, date_start_operating = ?,
+                    maintenance_1 = ?, period_1 = ?, maintenance_2 = ?, period_2 = ?,
+                    maintenance_3 = ?, period_3 = ?
                 WHERE id = ?
-            """, (self.instrument_id,))
-            result = cursor.fetchone()
-            return result and result['responsible_user_id'] == self.user_id
-        except Exception:
-            return False
+            """, (name, model, serial, location, brand, status, 
+                  responsible_user_id, date_start,
+                  maint_type1, period1 if period1 else None,
+                  maint_type2, period2 if period2 else None,
+                  maint_type3, period3 if period3 else None,
+                  self.instrument_id))
+            
+            self.db.conn.commit()
+            self.set_edit_mode(False)  # Return to read-only mode
+            self.load_instrument_data()  # Refresh the data
+            
+            # Notify parent to refresh the list
+            if hasattr(self.parent(), 'load_instruments'):
+                self.parent().load_instruments()
+
+        except Exception as e:
+            self.db.conn.rollback()
+            QMessageBox.warning(self, 'Error', f'Failed to save changes: {str(e)}')
 
     def load_instrument_data(self):
         try:
@@ -470,13 +635,47 @@ class InstrumentDetailsDialog(QDialog):
             instrument = cursor.fetchone()
 
             if instrument:
-                self.name_label.setText(instrument['name'])
-                self.model_label.setText(instrument['model'])
-                self.serial_label.setText(instrument['serial_number'])
-                self.location_label.setText(instrument['location'])
-                self.brand_label.setText(instrument['brand'])
-                self.status_label.setText(instrument['status'])
-                self.responsible_label.setText(instrument['responsible_username'] or 'Not assigned')
+                self.name_input.setText(instrument['name'])
+                self.model_input.setText(instrument['model'])
+                self.serial_input.setText(instrument['serial_number'])
+                self.location_input.setText(instrument['location'])
+                self.brand_input.setText(instrument['brand'])
+                self.status_input.setCurrentText(instrument['status'])
+                
+                # Format and set the date start operating
+                if instrument['date_start_operating']:
+                    try:
+                        # Convert YYYY-MM-DD to DD-MM-YYYY for display
+                        year, month, day = instrument['date_start_operating'].split('-')
+                        formatted_date = f"{day}-{month}-{year}"
+                        self.date_start_input.setText(formatted_date)
+                    except:
+                        self.date_start_input.setText(instrument['date_start_operating'])
+                else:
+                    self.date_start_input.setText('')
+                
+                # Set responsible user
+                index = self.responsible_user.findData(instrument['responsible_user_id'])
+                if index >= 0:
+                    self.responsible_user.setCurrentIndex(index)
+
+                # Set maintenance types and periods
+                if instrument['maintenance_1']:
+                    index = self.maintenance_type1.findData(instrument['maintenance_1'])
+                    if index >= 0:
+                        self.maintenance_type1.setCurrentIndex(index)
+                if instrument['maintenance_2']:
+                    index = self.maintenance_type2.findData(instrument['maintenance_2'])
+                    if index >= 0:
+                        self.maintenance_type2.setCurrentIndex(index)
+                if instrument['maintenance_3']:
+                    index = self.maintenance_type3.findData(instrument['maintenance_3'])
+                    if index >= 0:
+                        self.maintenance_type3.setCurrentIndex(index)
+
+                self.period1_input.setText(str(instrument['period_1']) if instrument['period_1'] else '')
+                self.period2_input.setText(str(instrument['period_2']) if instrument['period_2'] else '')
+                self.period3_input.setText(str(instrument['period_3']) if instrument['period_3'] else '')
 
             # Load maintenance schedule
             cursor.execute("""
@@ -547,6 +746,19 @@ class InstrumentDetailsDialog(QDialog):
 
         except Exception as e:
             QMessageBox.warning(self, 'Error', f'Failed to load instrument data: {str(e)}')
+
+    def is_responsible_user(self):
+        try:
+            cursor = self.db.conn.cursor()
+            cursor.execute("""
+                SELECT responsible_user_id 
+                FROM instruments 
+                WHERE id = ?
+            """, (self.instrument_id,))
+            result = cursor.fetchone()
+            return result and result['responsible_user_id'] == self.user_id
+        except Exception:
+            return False
 
     def add_maintenance(self):
         dialog = AddMaintenanceDialog(self.instrument_id, self.user_id, self)
@@ -626,9 +838,11 @@ class InstrumentsWindow(QWidget):
 
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(14)  # Updated number of columns
+        self.table.setColumnCount(17)  # Updated number of columns
         self.table.setHorizontalHeaderLabels([
-            'Name', 'Model', 'Serial Number', 'Location', 'Brand', 'Status', 'Responsible User', 'Last Maintenance',
+            'Name', 'Model', 'Serial Number', 'Location', 'Brand', 'Status', 'Responsible User',
+            'Last Maintenance 1', 'Last Maintenance 2', 'Last Maintenance 3',
+            'Next Maintenance',
             'Maintenance 1', 'Period 1', 'Maintenance 2', 'Period 2', 'Maintenance 3', 'Period 3'
         ])
         # Set horizontal header to stretch last section and show scrollbar when needed
@@ -682,7 +896,7 @@ class InstrumentsWindow(QWidget):
         refresh_button.setFixedWidth(button_width)
         back_button.setFixedWidth(button_width)
 
-        add_button.clicked.connect(self.add_instrument)
+        add_button.clicked.connect(self.show_add_instrument)
         refresh_button.clicked.connect(self.load_instruments)
         back_button.clicked.connect(self.back_signal.emit)
 
@@ -705,22 +919,74 @@ class InstrumentsWindow(QWidget):
         try:
             cursor = self.db.conn.cursor()
             cursor.execute("""
+                WITH maintenance_dates AS (
+                    SELECT 
+                        instrument_id,
+                        maintenance_type_id,
+                        MAX(maintenance_date) as last_date
+                    FROM maintenance_records
+                    GROUP BY instrument_id, maintenance_type_id
+                )
                 SELECT i.*, u.username as responsible_username,
-                       (SELECT MAX(maintenance_date) FROM maintenance_records WHERE instrument_id = i.id) as last_maintenance,
                        mt1.name as maintenance_type_1,
                        mt2.name as maintenance_type_2,
-                       mt3.name as maintenance_type_3
+                       mt3.name as maintenance_type_3,
+                       md1.last_date as last_maintenance_1,
+                       md2.last_date as last_maintenance_2,
+                       md3.last_date as last_maintenance_3,
+                       CASE 
+                           WHEN i.maintenance_1 IS NOT NULL AND i.period_1 IS NOT NULL THEN
+                               CASE 
+                                   WHEN md1.last_date IS NULL THEN
+                                       date(i.date_start_operating)
+                                   ELSE
+                                       date(md1.last_date, '+' || (i.period_1 * 7) || ' days')
+                               END
+                           ELSE NULL
+                       END as next_maintenance_1,
+                       CASE 
+                           WHEN i.maintenance_2 IS NOT NULL AND i.period_2 IS NOT NULL THEN
+                               CASE 
+                                   WHEN md2.last_date IS NULL THEN
+                                       date(i.date_start_operating)
+                                   ELSE
+                                       date(md2.last_date, '+' || (i.period_2 * 7) || ' days')
+                               END
+                           ELSE NULL
+                       END as next_maintenance_2,
+                       CASE 
+                           WHEN i.maintenance_3 IS NOT NULL AND i.period_3 IS NOT NULL THEN
+                               CASE 
+                                   WHEN md3.last_date IS NULL THEN
+                                       date(i.date_start_operating)
+                                   ELSE
+                                       date(md3.last_date, '+' || (i.period_3 * 7) || ' days')
+                               END
+                           ELSE NULL
+                       END as next_maintenance_3
                 FROM instruments i
                 LEFT JOIN users u ON i.responsible_user_id = u.id
                 LEFT JOIN maintenance_types mt1 ON i.maintenance_1 = mt1.id
                 LEFT JOIN maintenance_types mt2 ON i.maintenance_2 = mt2.id
                 LEFT JOIN maintenance_types mt3 ON i.maintenance_3 = mt3.id
+                LEFT JOIN maintenance_dates md1 ON i.id = md1.instrument_id AND i.maintenance_1 = md1.maintenance_type_id
+                LEFT JOIN maintenance_dates md2 ON i.id = md2.instrument_id AND i.maintenance_2 = md2.maintenance_type_id
+                LEFT JOIN maintenance_dates md3 ON i.id = md3.instrument_id AND i.maintenance_3 = md3.maintenance_type_id
                 ORDER BY i.name
             """)
             instruments = cursor.fetchall()
 
             self.table.setRowCount(len(instruments))
             for i, instrument in enumerate(instruments):
+                # Calculate the earliest next maintenance date
+                next_maintenance_dates = [
+                    instrument['next_maintenance_1'],
+                    instrument['next_maintenance_2'],
+                    instrument['next_maintenance_3']
+                ]
+                next_maintenance_dates = [d for d in next_maintenance_dates if d is not None]
+                next_maintenance = min(next_maintenance_dates) if next_maintenance_dates else None
+
                 for col, value in enumerate([
                     instrument['name'],
                     instrument['model'],
@@ -729,7 +995,10 @@ class InstrumentsWindow(QWidget):
                     instrument['brand'],
                     instrument['status'],
                     instrument['responsible_username'] or 'Not assigned',
-                    str(instrument['last_maintenance'] or 'Never'),
+                    str(instrument['last_maintenance_1'] or 'Never'),
+                    str(instrument['last_maintenance_2'] or 'Never'),
+                    str(instrument['last_maintenance_3'] or 'Never'),
+                    str(next_maintenance or 'Not scheduled'),
                     instrument['maintenance_type_1'] or '',
                     str(instrument['period_1']) if instrument['period_1'] else '',
                     instrument['maintenance_type_2'] or '',
@@ -744,17 +1013,17 @@ class InstrumentsWindow(QWidget):
         except Exception as e:
             QMessageBox.warning(self, 'Error', f'Failed to load instruments: {str(e)}')
 
-    def add_instrument(self):
+    def show_add_instrument(self):
         dialog = AddInstrumentDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.load_instruments()
+        dialog.finished.connect(self.load_instruments)  # Connect to finished signal to refresh list
+        dialog.show()  # Changed from exec() to show()
 
     def show_instrument_details(self, item):
         row = item.row()
         instrument_id = self.get_instrument_id_from_row(row)
         if instrument_id:
             dialog = InstrumentDetailsDialog(instrument_id, self)
-            dialog.exec()
+            dialog.show()  # Changed from exec() to show()
 
     def get_instrument_id_from_row(self, row):
         try:
