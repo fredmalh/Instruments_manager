@@ -12,6 +12,7 @@ from main_menu import MainMenu
 from instruments_window import InstrumentsWindow
 from maintenance_window import MaintenanceWindow
 from users_window import UsersWindow
+import sys
 
 class AddInstrumentDialog(QDialog):
     def __init__(self, parent=None):
@@ -61,7 +62,7 @@ class AddInstrumentDialog(QDialog):
         layout = QFormLayout(self)
         layout.setSpacing(10)
 
-        # Basic Information
+        # General Information
         self.name_input = QLineEdit()
         self.model_input = QLineEdit()
         self.serial_input = QLineEdit()
@@ -372,7 +373,11 @@ class InstrumentDetailsDialog(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle('Instrument Details')
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(1000, 800)  # Increased minimum size
+        
+        # Set default font for the dialog and all its children
+        default_font = QFont('Arial', 10)
+        self.setFont(default_font)
         
         # Create central widget and main layout
         central_widget = QWidget()
@@ -380,9 +385,23 @@ class InstrumentDetailsDialog(QMainWindow):
         layout = QVBoxLayout(central_widget)
         layout.setSpacing(10)
 
-        # Basic Information Group
-        basic_group = QGroupBox("Basic Information")
-        basic_layout = QFormLayout()
+        # Create horizontal layout for basic info and maintenance config
+        top_layout = QHBoxLayout()
+        top_layout.setSpacing(20)  # Add some space between the two groups
+
+        # General Information Group
+        basic_group = QGroupBox("General Information")
+        basic_group.setFont(QFont('Arial', 11, QFont.Weight.Bold))  # Slightly larger and bold for group titles
+        
+        # Create horizontal layout for two columns
+        basic_columns = QHBoxLayout()
+        basic_columns.setSpacing(20)  # Add some space between columns
+        
+        # Create two form layouts for the columns
+        left_column = QFormLayout()
+        right_column = QFormLayout()
+        left_column.setSpacing(8)
+        right_column.setSpacing(8)
         
         # Create input fields instead of labels
         self.name_input = QLineEdit()
@@ -396,6 +415,12 @@ class InstrumentDetailsDialog(QMainWindow):
         self.date_start_input = QLineEdit()
         self.date_start_input.setPlaceholderText("DD-MM-YYYY")
 
+        # Set font for all input fields
+        for widget in [self.name_input, self.model_input, self.serial_input, 
+                      self.location_input, self.brand_input, self.status_input,
+                      self.responsible_user, self.date_start_input]:
+            widget.setFont(default_font)
+
         # Load users for responsible user dropdown
         cursor = self.db.conn.cursor()
         cursor.execute("SELECT id, username FROM users ORDER BY username")
@@ -403,20 +428,41 @@ class InstrumentDetailsDialog(QMainWindow):
         for user_id, username in users:
             self.responsible_user.addItem(username, user_id)
 
-        basic_layout.addRow('Name:', self.name_input)
-        basic_layout.addRow('Model:', self.model_input)
-        basic_layout.addRow('Serial Number:', self.serial_input)
-        basic_layout.addRow('Location:', self.location_input)
-        basic_layout.addRow('Brand:', self.brand_input)
-        basic_layout.addRow('Status:', self.status_input)
-        basic_layout.addRow('Responsible User:', self.responsible_user)
-        basic_layout.addRow('Date Start Operating:', self.date_start_input)
-        basic_group.setLayout(basic_layout)
-        layout.addWidget(basic_group)
+        # Add rows to left column
+        for label_text, widget in [
+            ('Name:', self.name_input),
+            ('Model:', self.model_input),
+            ('Serial Number:', self.serial_input),
+            ('Location:', self.location_input)
+        ]:
+            label = QLabel(label_text)
+            label.setFont(default_font)
+            left_column.addRow(label, widget)
 
-        # Maintenance Configuration Group
-        maintenance_config_group = QGroupBox("Maintenance Configuration")
+        # Add rows to right column
+        for label_text, widget in [
+            ('Brand:', self.brand_input),
+            ('Status:', self.status_input),
+            ('Responsible User:', self.responsible_user),
+            ('Date Start Operating:', self.date_start_input)
+        ]:
+            label = QLabel(label_text)
+            label.setFont(default_font)
+            right_column.addRow(label, widget)
+
+        # Add columns to the horizontal layout
+        basic_columns.addLayout(left_column)
+        basic_columns.addLayout(right_column)
+        
+        # Set the layout for the group box
+        basic_group.setLayout(basic_columns)
+        top_layout.addWidget(basic_group)
+
+        # Maintenance Group
+        maintenance_config_group = QGroupBox("Maintenance")
+        maintenance_config_group.setFont(QFont('Arial', 11, QFont.Weight.Bold))
         maintenance_config_layout = QFormLayout()
+        maintenance_config_layout.setSpacing(8)
 
         # Create maintenance type and period inputs
         self.maintenance_type1 = QComboBox()
@@ -425,6 +471,11 @@ class InstrumentDetailsDialog(QMainWindow):
         self.period1_input = QLineEdit()
         self.period2_input = QLineEdit()
         self.period3_input = QLineEdit()
+        
+        # Set font for all maintenance inputs
+        for widget in [self.maintenance_type1, self.maintenance_type2, self.maintenance_type3,
+                      self.period1_input, self.period2_input, self.period3_input]:
+            widget.setFont(default_font)
         
         # Set placeholders for period inputs
         self.period1_input.setPlaceholderText("Weeks between maintenance")
@@ -445,48 +496,82 @@ class InstrumentDetailsDialog(QMainWindow):
         self.maintenance_type2.setCurrentIndex(0)
         self.maintenance_type3.setCurrentIndex(0)
 
-        maintenance_config_layout.addRow('Maintenance Type 1:', self.maintenance_type1)
-        maintenance_config_layout.addRow('Period 1 (weeks):', self.period1_input)
-        maintenance_config_layout.addRow('Maintenance Type 2:', self.maintenance_type2)
-        maintenance_config_layout.addRow('Period 2 (weeks):', self.period2_input)
-        maintenance_config_layout.addRow('Maintenance Type 3:', self.maintenance_type3)
-        maintenance_config_layout.addRow('Period 3 (weeks):', self.period3_input)
+        # Add rows with labels
+        for label_text, widget in [
+            ('Maintenance Type 1:', self.maintenance_type1),
+            ('Period 1 (weeks):', self.period1_input),
+            ('Maintenance Type 2:', self.maintenance_type2),
+            ('Period 2 (weeks):', self.period2_input),
+            ('Maintenance Type 3:', self.maintenance_type3),
+            ('Period 3 (weeks):', self.period3_input)
+        ]:
+            label = QLabel(label_text)
+            label.setFont(default_font)
+            maintenance_config_layout.addRow(label, widget)
         
         maintenance_config_group.setLayout(maintenance_config_layout)
-        layout.addWidget(maintenance_config_group)
+        top_layout.addWidget(maintenance_config_group)
+
+        # Add the top layout to the main layout
+        layout.addLayout(top_layout)
 
         # Maintenance Schedule Group
         schedule_group = QGroupBox("Maintenance Schedule")
+        schedule_group.setFont(QFont('Arial', 11, QFont.Weight.Bold))
         schedule_layout = QVBoxLayout()
         self.schedule_table = QTableWidget()
         self.schedule_table.setColumnCount(3)
         self.schedule_table.setHorizontalHeaderLabels(['Maintenance Type', 'Period (weeks)', 'Last Maintenance'])
+        
+        # Set consistent font for all headers
+        header_font = QFont('Arial', 10)
+        self.schedule_table.horizontalHeader().setFont(header_font)
+        
         self.schedule_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self.schedule_table.horizontalHeader().setStretchLastSection(True)
+        self.schedule_table.horizontalHeader().setStretchLastSection(False)
         self.schedule_table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
         self.schedule_table.setHorizontalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
         self.schedule_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.schedule_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.schedule_table.setAlternatingRowColors(True)
-        self.schedule_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)  # Make table read-only by default
+        self.schedule_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.schedule_table.setFont(default_font)  # Set font for table
+        
+        # Set fixed height for the schedule table to show 3 rows
+        header_height = self.schedule_table.horizontalHeader().height()
+        row_height = 35  # Height for each row
+        spacing = 2  # Spacing between rows
+        padding = 10  # Additional padding
+        self.schedule_table.setFixedHeight(header_height + (row_height * 3) + (spacing * 2) + padding)
+        
         schedule_layout.addWidget(self.schedule_table)
         schedule_group.setLayout(schedule_layout)
         layout.addWidget(schedule_group)
 
         # Maintenance History Group
         history_group = QGroupBox("Maintenance History")
+        history_group.setFont(QFont('Arial', 11, QFont.Weight.Bold))
         history_layout = QVBoxLayout()
         self.history_table = QTableWidget()
         self.history_table.setColumnCount(4)
         self.history_table.setHorizontalHeaderLabels(['Date', 'Type', 'Performed By', 'Notes'])
         self.history_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self.history_table.horizontalHeader().setStretchLastSection(True)
+        self.history_table.horizontalHeader().setStretchLastSection(False)
         self.history_table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
         self.history_table.setHorizontalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
         self.history_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.history_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.history_table.setAlternatingRowColors(True)
-        self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)  # Make table read-only by default
+        self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.history_table.setFont(default_font)  # Set font for table
+        
+        # Set fixed height for the history table to show 10 rows
+        header_height = self.history_table.horizontalHeader().height()
+        row_height = 35  # Height for each row
+        spacing = 2  # Spacing between rows
+        padding = 10  # Additional padding
+        self.history_table.setFixedHeight(header_height + (row_height * 10) + (spacing * 9) + padding)
+        
         history_layout.addWidget(self.history_table)
         history_group.setLayout(history_layout)
         layout.addWidget(history_group)
@@ -498,6 +583,12 @@ class InstrumentDetailsDialog(QMainWindow):
         self.cancel_button = QPushButton('Cancel')
         add_maintenance_button = QPushButton('Add Maintenance Record')
         close_button = QPushButton('Close')
+
+        # Set font for all buttons
+        button_font = QFont('Arial', 10, QFont.Weight.Medium)
+        for button in [self.edit_button, self.save_button, self.cancel_button, 
+                      add_maintenance_button, close_button]:
+            button.setFont(button_font)
 
         # Only show add maintenance button if user is admin or responsible for the instrument
         if self.is_admin or self.is_responsible_user():
@@ -593,8 +684,10 @@ class InstrumentDetailsDialog(QMainWindow):
                 QMessageBox.warning(self, 'Error', 'Please enter valid numbers for maintenance periods')
                 return
 
-            # Update database
+            # Start transaction
             cursor = self.db.conn.cursor()
+            
+            # Update basic instrument information and maintenance schedule
             cursor.execute("""
                 UPDATE instruments 
                 SET name = ?, model = ?, serial_number = ?, location = ?, 
@@ -608,6 +701,72 @@ class InstrumentDetailsDialog(QMainWindow):
                   maint_type2, period2 if period2 else None,
                   maint_type3, period3 if period3 else None,
                   self.instrument_id))
+            
+            # Save changes to maintenance schedule table
+            for row in range(self.schedule_table.rowCount()):
+                type_name = self.schedule_table.item(row, 0).text()
+                period = self.schedule_table.item(row, 1).text()
+                last_maintenance = self.schedule_table.item(row, 2).text()
+                
+                # Get maintenance type ID
+                cursor.execute("SELECT id FROM maintenance_types WHERE name = ?", (type_name,))
+                maint_type = cursor.fetchone()
+                if maint_type:
+                    maint_type_id = maint_type['id']
+                    
+                    # If last maintenance date was changed
+                    if last_maintenance != 'Never':
+                        try:
+                            # Convert DD-MM-YYYY to YYYY-MM-DD
+                            day, month, year = last_maintenance.split('-')
+                            last_maintenance = f"{year}-{month}-{day}"
+                            
+                            # Update or insert maintenance record
+                            cursor.execute("""
+                                INSERT OR REPLACE INTO maintenance_records 
+                                (instrument_id, maintenance_type_id, maintenance_date, performed_by, notes)
+                                VALUES (?, ?, ?, ?, ?)
+                            """, (self.instrument_id, maint_type_id, last_maintenance, 
+                                 responsible_user_id, "Updated maintenance date"))
+                        except ValueError:
+                            QMessageBox.warning(self, 'Error', 'Please enter valid dates in DD-MM-YYYY format')
+                            return
+            
+            # Save changes to maintenance history table
+            for row in range(self.history_table.rowCount()):
+                date = self.history_table.item(row, 0).text()
+                type_name = self.history_table.item(row, 1).text()
+                performed_by = self.history_table.item(row, 2).text()
+                notes = self.history_table.item(row, 3).text()
+                
+                # Get maintenance type ID
+                cursor.execute("SELECT id FROM maintenance_types WHERE name = ?", (type_name,))
+                maint_type = cursor.fetchone()
+                if maint_type:
+                    maint_type_id = maint_type['id']
+                    
+                    # Get user ID
+                    cursor.execute("SELECT id FROM users WHERE username = ?", (performed_by,))
+                    user = cursor.fetchone()
+                    if user:
+                        user_id = user['id']
+                        
+                        try:
+                            # Convert DD-MM-YYYY to YYYY-MM-DD
+                            day, month, year = date.split('-')
+                            date = f"{year}-{month}-{day}"
+                            
+                            # Update maintenance record
+                            cursor.execute("""
+                                UPDATE maintenance_records 
+                                SET maintenance_date = ?, performed_by = ?, notes = ?
+                                WHERE instrument_id = ? AND maintenance_type_id = ? 
+                                AND maintenance_date = ?
+                            """, (date, user_id, notes, self.instrument_id, 
+                                 maint_type_id, date))
+                        except ValueError:
+                            QMessageBox.warning(self, 'Error', 'Please enter valid dates in DD-MM-YYYY format')
+                            return
             
             self.db.conn.commit()
             self.set_edit_mode(False)  # Return to read-only mode
@@ -625,7 +784,7 @@ class InstrumentDetailsDialog(QMainWindow):
         try:
             cursor = self.db.conn.cursor()
             
-            # Load basic information
+            # Load General Information
             cursor.execute("""
                 SELECT i.*, u.username as responsible_username
                 FROM instruments i
@@ -720,6 +879,9 @@ class InstrumentDetailsDialog(QMainWindow):
                         item = QTableWidgetItem(value)
                         item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                         self.schedule_table.setItem(i, col, item)
+                
+                # Resize columns to content
+                self.schedule_table.resizeColumnsToContents()
 
             # Load maintenance history
             cursor.execute("""
@@ -743,6 +905,9 @@ class InstrumentDetailsDialog(QMainWindow):
                     item = QTableWidgetItem(value)
                     item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                     self.history_table.setItem(i, col, item)
+            
+            # Resize columns to content
+            self.history_table.resizeColumnsToContents()
 
         except Exception as e:
             QMessageBox.warning(self, 'Error', f'Failed to load instrument data: {str(e)}')
@@ -1039,9 +1204,18 @@ class InstrumentsWindow(QWidget):
 class CentralWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.current_user_id = None
-        self.current_is_admin = False
-        self.db = Database()  # Create a single database connection
+        self.setWindowTitle('Laboratory Instruments Management System')
+        self.setGeometry(100, 100, 1200, 800)
+        
+        try:
+            self.db = Database()
+        except FileNotFoundError as e:
+            QMessageBox.critical(self, 'Error', str(e))
+            sys.exit(1)
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Failed to connect to database: {str(e)}')
+            sys.exit(1)
+            
         self.init_ui()
         self.apply_dark_theme()
         self.showMaximized()  # Start in full screen

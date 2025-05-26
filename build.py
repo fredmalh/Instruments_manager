@@ -1,103 +1,52 @@
-import PyInstaller.__main__
 import os
 import sys
-import site
-import time
-from pathlib import Path
+import shutil
+from PyInstaller.__main__ import run
 
-# Get the site-packages directory
-site_packages = site.getsitepackages()[0]
+def build_application():
+    # Get the directory where the script is located
+    if getattr(sys, 'frozen', False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    print(f"Base directory: {base_dir}")
+    
+    # Create dist directory if it doesn't exist
+    dist_dir = os.path.join(base_dir, 'dist')
+    if not os.path.exists(dist_dir):
+        os.makedirs(dist_dir)
+        print(f"Created dist directory: {dist_dir}")
+    else:
+        print(f"Dist directory already exists: {dist_dir}")
+    
+    # Build the application using PyInstaller
+    print("Building application with PyInstaller...")
+    run([
+        'main.py',
+        '--onefile',
+        '--windowed',
+        '--name=main',
+        '--distpath=' + dist_dir,
+        '--workpath=' + os.path.join(base_dir, 'build'),
+        '--specpath=' + base_dir,
+        '--clean'
+    ])
+    
+    # Verify the executable was created
+    exe_path = os.path.join(dist_dir, 'main.exe')
+    if os.path.exists(exe_path):
+        print(f"Application built successfully at: {exe_path}")
+    else:
+        print(f"ERROR: Application was not built at: {exe_path}")
+        return
+    
+    print("\nBuild completed successfully!")
+    print(f"Application is in: {dist_dir}")
+    print("\nTo run the application:")
+    print(f"1. Navigate to: {dist_dir}")
+    print("2. Run main.exe")
+    print("\nNote: The database is stored in: D:/CURSOR/PROJECTS/LabManager/Database")
 
-# Find PyQt6 installation
-pyqt_path = None
-for path in site.getsitepackages():
-    qt_path = os.path.join(path, 'PyQt6', 'Qt6')
-    if os.path.exists(qt_path):
-        pyqt_path = qt_path
-        break
-
-if not pyqt_path:
-    print("Error: Could not find PyQt6 installation")
-    sys.exit(1)
-
-# Clean up any previous builds
-def safe_remove(path):
-    if os.path.exists(path):
-        try:
-            import shutil
-            shutil.rmtree(path)
-            print(f"Successfully removed {path}")
-        except PermissionError:
-            print(f"Warning: Could not remove {path} - it may be in use")
-            print("Please close any running instances of the application and try again")
-            sys.exit(1)
-        except Exception as e:
-            print(f"Warning: Error removing {path}: {e}")
-            print("Trying to continue anyway...")
-
-print("Cleaning up previous builds...")
-safe_remove('dist')
-safe_remove('build')
-
-# Define PyInstaller arguments
-args = [
-    'main.py',  # Your main script
-    '--name=LabInstrumentManager',  # Name of the executable
-    '--onefile',  # Create a single executable
-    '--windowed',  # Don't show console window
-    '--clean',  # Clean PyInstaller cache
-    '--noconfirm',  # Replace existing build
-    '--hidden-import=pkgutil',  # Add hidden imports
-    '--hidden-import=sqlite3',
-    '--hidden-import=bcrypt',
-    '--hidden-import=PyQt6',
-    '--hidden-import=PyQt6.QtCore',
-    '--hidden-import=PyQt6.QtGui',
-    '--hidden-import=PyQt6.QtWidgets',
-    '--collect-all=PyQt6',  # Collect all PyQt6 modules
-    '--collect-submodules=PyQt6',  # Collect all PyQt6 submodules
-    '--exclude-module=matplotlib',  # Exclude unnecessary modules
-    '--exclude-module=numpy',
-    '--exclude-module=PIL',
-    '--exclude-module=scipy',
-    '--exclude-module=pandas',
-    '--exclude-module=tkinter',
-    '--exclude-module=PyQt6.QtWebEngineCore',
-    '--exclude-module=PyQt6.QtWebEngineWidgets',
-    '--exclude-module=PyQt6.QtWebEngine',
-    '--exclude-module=PyQt6.QtWebSockets',
-    '--exclude-module=PyQt6.QtNetwork',
-    '--exclude-module=PyQt6.QtBluetooth',
-    '--exclude-module=PyQt6.QtDBus',
-    '--exclude-module=PyQt6.QtDesigner',
-    '--exclude-module=PyQt6.QtHelp',
-    '--exclude-module=PyQt6.QtLocation',
-    '--exclude-module=PyQt6.QtMultimedia',
-    '--exclude-module=PyQt6.QtNfc',
-    '--exclude-module=PyQt6.QtOpenGL',
-    '--exclude-module=PyQt6.QtPositioning',
-    '--exclude-module=PyQt6.QtPrintSupport',
-    '--exclude-module=PyQt6.QtQml',
-    '--exclude-module=PyQt6.QtQuick',
-    '--exclude-module=PyQt6.QtQuickWidgets',
-    '--exclude-module=PyQt6.QtRemoteObjects',
-    '--exclude-module=PyQt6.QtSensors',
-    '--exclude-module=PyQt6.QtSerialPort',
-    '--exclude-module=PyQt6.QtSql',
-    '--exclude-module=PyQt6.QtSvg',
-    '--exclude-module=PyQt6.QtTest',
-    '--exclude-module=PyQt6.QtWebChannel',
-    '--exclude-module=PyQt6.QtWebEngineCore',
-    '--exclude-module=PyQt6.QtWebEngineWidgets',
-    '--exclude-module=PyQt6.QtWebEngine',
-    '--exclude-module=PyQt6.QtWebSockets',
-    '--exclude-module=PyQt6.QtXml',
-    '--exclude-module=PyQt6.QtXmlPatterns',
-]
-
-print("Starting build process...")
-# Run PyInstaller
-PyInstaller.__main__.run(args)
-
-print("\nBuild complete! The executable is in the 'dist' folder.")
-print("You can find it at:", os.path.abspath(os.path.join('dist', 'LabInstrumentManager.exe')))
+if __name__ == "__main__":
+    build_application()

@@ -195,7 +195,7 @@ class UsersWindow(QWidget):
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setAlternatingRowColors(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.horizontalHeader().setStretchLastSection(False)
         layout.addWidget(self.table)
 
         # Bottom buttons
@@ -245,6 +245,7 @@ class UsersWindow(QWidget):
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, col, item)
 
+        # Resize columns to content
         self.table.resizeColumnsToContents()
 
     def add_user(self):

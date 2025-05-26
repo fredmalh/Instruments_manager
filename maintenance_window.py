@@ -277,7 +277,7 @@ class MaintenanceWindow(QWidget):
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setAlternatingRowColors(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.horizontalHeader().setStretchLastSection(False)
         layout.addWidget(self.table)
 
         # Bottom buttons
@@ -398,6 +398,7 @@ class MaintenanceWindow(QWidget):
                     
                     self.table.setItem(row, col, item)
 
+            # Resize columns to content
             self.table.resizeColumnsToContents()
 
         except Exception as e:
