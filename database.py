@@ -192,11 +192,12 @@ class Database:
         if cursor.fetchone()[0] == 0:
             # Add default users
             default_users = [
-                ('admin1', 'admin1@example.com', bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt()), True),
-                ('admin2', 'admin2@example.com', bcrypt.hashpw('admin456'.encode('utf-8'), bcrypt.gensalt()), True),
-                ('user1', 'user1@example.com', bcrypt.hashpw('user123'.encode('utf-8'), bcrypt.gensalt()), False),
-                ('user2', 'user2@example.com', bcrypt.hashpw('user456'.encode('utf-8'), bcrypt.gensalt()), False),
-                ('user3', 'user3@example.com', bcrypt.hashpw('user789'.encode('utf-8'), bcrypt.gensalt()), False)
+                ('admin1', 'admin1@example.com', bcrypt.hashpw('admin111'.encode('utf-8'), bcrypt.gensalt()), True),
+                ('admin2', 'admin2@example.com', bcrypt.hashpw('admin222'.encode('utf-8'), bcrypt.gensalt()), True),
+                ('user1', 'user1@example.com', bcrypt.hashpw('user111'.encode('utf-8'), bcrypt.gensalt()), False),
+                ('user2', 'user2@example.com', bcrypt.hashpw('user222'.encode('utf-8'), bcrypt.gensalt()), False),
+                ('user3', 'user3@example.com', bcrypt.hashpw('user333'.encode('utf-8'), bcrypt.gensalt()), False),
+                ('user4', 'user4@example.com', bcrypt.hashpw('user444'.encode('utf-8'), bcrypt.gensalt()), False)
             ]
             
             cursor.executemany(

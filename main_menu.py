@@ -90,7 +90,7 @@ class MainMenu(QWidget):
 
         # User info
         cursor = self.db.conn.cursor()
-        cursor.execute("SELECT username FROM users WHERE id = ?", (self.user_id,))
+        cursor.execute("SELECT username star users WHERE id = ?", (self.user_id,))
         user = cursor.fetchone()
         if user:
             user_info = QLabel(f'Logged in as: {user["username"]} ({self.is_admin and "Admin" or "User"})')
