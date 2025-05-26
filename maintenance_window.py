@@ -262,10 +262,11 @@ class MaintenanceWindow(QWidget):
 
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(12)  # Increased to 12 columns
         self.table.setHorizontalHeaderLabels([
-            'Instrument', 'Model', 'Serial Number', 'Location', 'Maintenance Type', 
-            'Period (weeks)', 'Last Maintenance', 'Next Maintenance'
+            'Instrument', 'Brand', 'Model', 'Serial Number', 'Location', 
+            'Maintenance Type', 'Performed By', 'Last Maintenance', 
+            'Notes', 'Period (weeks)', 'Next Maintenance', 'Next Maintenance Operation'
         ])
         self.table.doubleClicked.connect(self.show_maintenance_details)
         
@@ -318,61 +319,86 @@ class MaintenanceWindow(QWidget):
         try:
             cursor = self.db.conn.cursor()
             cursor.execute("""
-                SELECT i.id, i.name, i.model, i.serial_number, i.location,
-                       mt.name as maintenance_type,
-                       CASE 
-                           WHEN i.maintenance_1 = mt.id THEN i.period_1
-                           WHEN i.maintenance_2 = mt.id THEN i.period_2
-                           WHEN i.maintenance_3 = mt.id THEN i.period_3
-                       END as period_weeks,
-                       (SELECT MAX(maintenance_date) 
-                        FROM maintenance_records 
-                        WHERE instrument_id = i.id AND maintenance_type_id = mt.id) as last_maintenance
+                SELECT 
+                    i.id,
+                    i.name,
+                    i.brand,
+                    i.model,
+                    i.serial_number,
+                    i.location,
+                    mt.name as maintenance_type,
+                    u.username as performed_by,
+                    (SELECT MAX(maintenance_date) 
+                     FROM maintenance_records 
+                     WHERE instrument_id = i.id AND maintenance_type_id = mt.id) as last_maintenance,
+                    (SELECT notes 
+                     FROM maintenance_records 
+                     WHERE instrument_id = i.id AND maintenance_type_id = mt.id 
+                     ORDER BY maintenance_date DESC LIMIT 1) as notes,
+                    CASE 
+                        WHEN i.maintenance_1 = mt.id THEN i.period_1
+                        WHEN i.maintenance_2 = mt.id THEN i.period_2
+                        WHEN i.maintenance_3 = mt.id THEN i.period_3
+                    END as period_weeks
                 FROM instruments i
                 JOIN maintenance_types mt ON mt.id IN (i.maintenance_1, i.maintenance_2, i.maintenance_3)
+                LEFT JOIN users u ON i.responsible_user_id = u.id
                 WHERE i.status = 'Operational'
                 ORDER BY i.name, mt.name
             """)
             schedules = cursor.fetchall()
 
             self.table.setRowCount(len(schedules))
-            for i, schedule in enumerate(schedules):
-                # Calculate next maintenance date
-                last_maintenance = schedule['last_maintenance']
-                period_weeks = schedule['period_weeks']
-                next_maintenance = None
+            self.table.setColumnCount(12)
+            self.table.setHorizontalHeaderLabels([
+                'Instrument', 'Brand', 'Model', 'Serial Number', 'Location', 
+                'Maintenance Type', 'Performed By', 'Last Maintenance', 
+                'Notes', 'Period (weeks)', 'Next Maintenance', 'Next Maintenance Operation'
+            ])
 
-                if last_maintenance and period_weeks:
-                    last_date = datetime.strptime(last_maintenance, '%Y-%m-%d')
-                    next_date = last_date + timedelta(weeks=period_weeks)
-                    next_maintenance = next_date.strftime('%Y-%m-%d')
-
-                for col, value in enumerate([
-                    schedule['name'],
-                    schedule['model'],
-                    schedule['serial_number'],
-                    schedule['location'],
-                    schedule['maintenance_type'],
-                    str(period_weeks),
-                    str(last_maintenance or 'Never'),
-                    str(next_maintenance or 'Not scheduled')
-                ]):
-                    item = QTableWidgetItem(value)
+            for row, schedule in enumerate(schedules):
+                # Get the values we need for calculations
+                last_maintenance = schedule[8]  # last_maintenance column
+                period_weeks = schedule[10]     # period_weeks column
+                
+                for col, value in enumerate(schedule[1:]):  # Skip the ID column
+                    item = QTableWidgetItem(str(value or ''))
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                     
-                    # Color the next maintenance date based on status
-                    if col == 7:  # Next maintenance column
-                        if next_maintenance:
-                            next_date = datetime.strptime(next_maintenance, '%Y-%m-%d')
-                            days_until_next = (next_date - datetime.now()).days
-                            if days_until_next < 0:
-                                item.setForeground(Qt.GlobalColor.red)  # Overdue
-                            elif days_until_next <= 7:
-                                item.setForeground(Qt.GlobalColor.yellow)  # Due within a week
-                            else:
-                                item.setForeground(Qt.GlobalColor.green)  # On schedule
+                    # For the next maintenance column, calculate the date
+                    if col == 10:  # Next maintenance column
+                        if last_maintenance and period_weeks:
+                            try:
+                                last_date = datetime.strptime(last_maintenance, '%Y-%m-%d')
+                                next_date = last_date + timedelta(weeks=int(period_weeks))
+                                next_maintenance = next_date.strftime('%Y-%m-%d')
+                                
+                                # Color code based on how soon maintenance is due
+                                days_until_next = (next_date - datetime.now()).days
+                                if days_until_next < 0:
+                                    item.setForeground(Qt.GlobalColor.red)  # Overdue
+                                elif days_until_next <= 7:
+                                    item.setForeground(Qt.GlobalColor.yellow)  # Due within a week
+                                else:
+                                    item.setForeground(Qt.GlobalColor.green)  # On schedule
+                                
+                                item.setText(next_maintenance)
+                            except (ValueError, TypeError):
+                                item.setText('Invalid date')
+                        else:
+                            item.setText('Not scheduled')
                     
-                    self.table.setItem(i, col, item)
+                    # For the next maintenance operation column, show the last maintenance date
+                    elif col == 11:  # Next Maintenance Operation column
+                        if last_maintenance:
+                            item.setText(str(last_maintenance))
+                        else:
+                            item.setText('Never')
+                    
+                    self.table.setItem(row, col, item)
+
+            self.table.resizeColumnsToContents()
 
         except Exception as e:
             QMessageBox.warning(self, 'Error', f'Failed to load maintenance schedule: {str(e)}')
