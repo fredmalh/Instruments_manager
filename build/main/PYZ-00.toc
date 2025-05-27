@@ -81,6 +81,7 @@
   ('dataclasses',
    'C:\\Users\\Work\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\dataclasses.py',
    'PYMODULE'),
+  ('date_utils', 'D:\\CURSOR\\PROJECTS\\date_utils.py', 'PYMODULE'),
   ('datetime',
    'C:\\Users\\Work\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\datetime.py',
    'PYMODULE'),

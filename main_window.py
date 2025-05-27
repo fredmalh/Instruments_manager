@@ -456,7 +456,7 @@ class InstrumentDetailsDialog(QMainWindow):
         
         # Set the layout for the group box
         basic_group.setLayout(basic_columns)
-        top_layout.addWidget(basic_group)
+        top_layout.addWidget(basic_group, 3)  # Set stretch factor to 3 for General Information
 
         # Maintenance Group
         maintenance_config_group = QGroupBox("Maintenance")
@@ -510,7 +510,7 @@ class InstrumentDetailsDialog(QMainWindow):
             maintenance_config_layout.addRow(label, widget)
         
         maintenance_config_group.setLayout(maintenance_config_layout)
-        top_layout.addWidget(maintenance_config_group)
+        top_layout.addWidget(maintenance_config_group, 2)  # Set stretch factor to 2 for Maintenance
 
         # Add the top layout to the main layout
         layout.addLayout(top_layout)
@@ -1010,14 +1010,14 @@ class InstrumentsWindow(QWidget):
             'Next Maintenance',
             'Maintenance 1', 'Period 1', 'Maintenance 2', 'Period 2', 'Maintenance 3', 'Period 3'
         ])
-        # Set horizontal header to stretch last section and show scrollbar when needed
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setStretchLastSection(True)
+        # Configure table for better scrolling and auto-resize
         self.table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
         self.table.setHorizontalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
         self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setAlternatingRowColors(True)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setStretchLastSection(False)  # Changed to False to allow proper resizing
         self.table.setStyleSheet("""
             QTableWidget {
                 background-color: #2d2d2d;
@@ -1205,7 +1205,22 @@ class CentralWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('Laboratory Instruments Management System')
-        self.setGeometry(100, 100, 1200, 800)
+        
+        # Set initial size
+        window_width = 800
+        window_height = 600
+        self.setMinimumSize(800, 600)
+        
+        # Get the screen geometry
+        screen = self.screen()
+        screen_geometry = screen.geometry()
+        
+        # Calculate center position
+        x = (screen_geometry.width() - window_width) // 2
+        y = (screen_geometry.height() - window_height) // 2
+        
+        # Set window position and size
+        self.setGeometry(x, y, window_width, window_height)
         
         try:
             self.db = Database()
@@ -1218,7 +1233,8 @@ class CentralWindow(QMainWindow):
             
         self.init_ui()
         self.apply_dark_theme()
-        self.showMaximized()  # Start in full screen
+        self.show()
+        self.showMaximized()  # Start maximized
 
     def init_ui(self):
         self.setWindowTitle('Laboratory Instrument Manager')
@@ -1382,7 +1398,6 @@ class CentralWindow(QMainWindow):
         # Update size of current widget
         current_widget = self.stacked_widget.currentWidget()
         if current_widget:
-            current_widget.setMinimumSize(self.size())
             current_widget.resize(self.size())
 
     def moveEvent(self, event):
@@ -1391,5 +1406,4 @@ class CentralWindow(QMainWindow):
         # Update size of current widget when window is moved
         current_widget = self.stacked_widget.currentWidget()
         if current_widget:
-            current_widget.setMinimumSize(self.size())
             current_widget.resize(self.size()) 

@@ -2,11 +2,17 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                             QPushButton, QTableWidget, QTableWidgetItem, QLabel,
                             QMessageBox, QDialog, QLineEdit, QFormLayout, QComboBox,
                             QTextEdit, QSplitter, QHeaderView, QTableView, QScrollArea,
-                            QMainWindow, QSizePolicy)
-from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex
-from PyQt6.QtGui import QFont
+                            QMainWindow, QSizePolicy, QDateEdit, QGroupBox)
+from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex, QDate
+from PyQt6.QtGui import QFont, QColor
 from database import Database
-from datetime import datetime
+from datetime import datetime, timedelta
+from date_utils import (
+    calculate_next_maintenance,
+    format_date_for_display,
+    format_date_for_db,
+    get_maintenance_status
+)
 
 class InstrumentDetailsDialog(QMainWindow):
     def __init__(self, instrument_id, user_id, is_admin, parent=None):
@@ -35,20 +41,40 @@ class InstrumentDetailsDialog(QMainWindow):
         # Get instrument details
         cursor = self.db.conn.cursor()
         cursor.execute("""
+            WITH maintenance_dates AS (
+                SELECT 
+                    instrument_id,
+                    maintenance_type_id,
+                    MAX(maintenance_date) as last_date
+                FROM maintenance_records
+                GROUP BY instrument_id, maintenance_type_id
+            )
             SELECT 
-                i.name,
-                i.model,
-                i.serial_number,
-                i.location,
-                i.status,
-                i.manufacturer,
-                i.purchase_date,
-                i.last_calibration,
-                i.next_calibration,
-                i.notes,
-                u.username as responsible_user
+                i.*,
+                u.username as responsible_user,
+                mt1.name as maintenance_type_1,
+                mt2.name as maintenance_type_2,
+                mt3.name as maintenance_type_3,
+                CASE 
+                    WHEN md1.last_date IS NULL THEN 'Never'
+                    ELSE md1.last_date
+                END as last_maintenance_1,
+                CASE 
+                    WHEN md2.last_date IS NULL THEN 'Never'
+                    ELSE md2.last_date
+                END as last_maintenance_2,
+                CASE 
+                    WHEN md3.last_date IS NULL THEN 'Never'
+                    ELSE md3.last_date
+                END as last_maintenance_3
             FROM instruments i
             LEFT JOIN users u ON i.responsible_user_id = u.id
+            LEFT JOIN maintenance_types mt1 ON i.maintenance_1 = mt1.id
+            LEFT JOIN maintenance_types mt2 ON i.maintenance_2 = mt2.id
+            LEFT JOIN maintenance_types mt3 ON i.maintenance_3 = mt3.id
+            LEFT JOIN maintenance_dates md1 ON i.id = md1.instrument_id AND i.maintenance_1 = md1.maintenance_type_id
+            LEFT JOIN maintenance_dates md2 ON i.id = md2.instrument_id AND i.maintenance_2 = md2.maintenance_type_id
+            LEFT JOIN maintenance_dates md3 ON i.id = md3.instrument_id AND i.maintenance_3 = md3.maintenance_type_id
             WHERE i.id = ?
         """, (self.instrument_id,))
         details = cursor.fetchone()
@@ -58,8 +84,38 @@ class InstrumentDetailsDialog(QMainWindow):
             self.close()
             return
 
+        # Calculate next maintenance dates using our utility function
+        next_maintenance_1 = calculate_next_maintenance(
+            details['last_maintenance_1'],
+            details['period_1'],
+            details['date_start_operating']
+        )
+        next_maintenance_2 = calculate_next_maintenance(
+            details['last_maintenance_2'],
+            details['period_2'],
+            details['date_start_operating']
+        )
+        next_maintenance_3 = calculate_next_maintenance(
+            details['last_maintenance_3'],
+            details['period_3'],
+            details['date_start_operating']
+        )
+
+        # Get maintenance status for each maintenance type
+        status_1, color_1 = get_maintenance_status(next_maintenance_1)
+        status_2, color_2 = get_maintenance_status(next_maintenance_2)
+        status_3, color_3 = get_maintenance_status(next_maintenance_3)
+
+        # Format dates for display
+        last_maintenance_1_display = format_date_for_display(details['last_maintenance_1']) if details['last_maintenance_1'] != 'Never' else 'Never'
+        last_maintenance_2_display = format_date_for_display(details['last_maintenance_2']) if details['last_maintenance_2'] != 'Never' else 'Never'
+        last_maintenance_3_display = format_date_for_display(details['last_maintenance_3']) if details['last_maintenance_3'] != 'Never' else 'Never'
+        next_maintenance_1_display = format_date_for_display(next_maintenance_1) if next_maintenance_1 else 'Not scheduled'
+        next_maintenance_2_display = format_date_for_display(next_maintenance_2) if next_maintenance_2 else 'Not scheduled'
+        next_maintenance_3_display = format_date_for_display(next_maintenance_3) if next_maintenance_3 else 'Not scheduled'
+
         # Title
-        title = QLabel(f"Instrument Details: {details[0]}")
+        title = QLabel(f"Instrument Details: {details['name']}")
         title.setFont(QFont('Arial', 16, QFont.Weight.Bold))
         layout.addWidget(title)
 
@@ -71,18 +127,48 @@ class InstrumentDetailsDialog(QMainWindow):
         details_widget = QWidget()
         details_layout = QFormLayout(details_widget)
         
-        # Add all details with proper labels
-        details_layout.addRow('Name:', QLabel(details[0]))
-        details_layout.addRow('Model:', QLabel(details[1]))
-        details_layout.addRow('Serial Number:', QLabel(details[2]))
-        details_layout.addRow('Location:', QLabel(details[3]))
-        details_layout.addRow('Status:', QLabel(details[4]))
-        details_layout.addRow('Manufacturer:', QLabel(details[5]))
-        details_layout.addRow('Purchase Date:', QLabel(details[6]))
-        details_layout.addRow('Last Calibration:', QLabel(details[7]))
-        details_layout.addRow('Next Calibration:', QLabel(details[8]))
-        details_layout.addRow('Notes:', QLabel(details[9]))
-        details_layout.addRow('Responsible User:', QLabel(details[10]))
+        # Add basic details
+        details_layout.addRow('Name:', QLabel(details['name']))
+        details_layout.addRow('Model:', QLabel(details['model']))
+        details_layout.addRow('Serial Number:', QLabel(details['serial_number']))
+        details_layout.addRow('Location:', QLabel(details['location']))
+        details_layout.addRow('Status:', QLabel(details['status']))
+        details_layout.addRow('Manufacturer:', QLabel(details['manufacturer']))
+        details_layout.addRow('Purchase Date:', QLabel(format_date_for_display(details['purchase_date'])))
+        details_layout.addRow('Last Calibration:', QLabel(format_date_for_display(details['last_calibration'])))
+        details_layout.addRow('Next Calibration:', QLabel(format_date_for_display(details['next_calibration'])))
+        details_layout.addRow('Notes:', QLabel(details['notes']))
+        details_layout.addRow('Responsible User:', QLabel(details['responsible_user'] or 'Not assigned'))
+
+        # Add maintenance details
+        maintenance_group = QGroupBox("Maintenance Schedule")
+        maintenance_layout = QFormLayout(maintenance_group)
+
+        # Maintenance Type 1
+        if details['maintenance_type_1']:
+            maint1_label = QLabel(f"{details['maintenance_type_1']} (Every {details['period_1']} weeks)")
+            maint1_label.setStyleSheet(f"color: {color_1};" if color_1 else "")
+            maintenance_layout.addRow('Type 1:', maint1_label)
+            maintenance_layout.addRow('Last Maintenance:', QLabel(last_maintenance_1_display))
+            maintenance_layout.addRow('Next Maintenance:', QLabel(next_maintenance_1_display))
+
+        # Maintenance Type 2
+        if details['maintenance_type_2']:
+            maint2_label = QLabel(f"{details['maintenance_type_2']} (Every {details['period_2']} weeks)")
+            maint2_label.setStyleSheet(f"color: {color_2};" if color_2 else "")
+            maintenance_layout.addRow('Type 2:', maint2_label)
+            maintenance_layout.addRow('Last Maintenance:', QLabel(last_maintenance_2_display))
+            maintenance_layout.addRow('Next Maintenance:', QLabel(next_maintenance_2_display))
+
+        # Maintenance Type 3
+        if details['maintenance_type_3']:
+            maint3_label = QLabel(f"{details['maintenance_type_3']} (Every {details['period_3']} weeks)")
+            maint3_label.setStyleSheet(f"color: {color_3};" if color_3 else "")
+            maintenance_layout.addRow('Type 3:', maint3_label)
+            maintenance_layout.addRow('Last Maintenance:', QLabel(last_maintenance_3_display))
+            maintenance_layout.addRow('Next Maintenance:', QLabel(next_maintenance_3_display))
+
+        details_layout.addRow(maintenance_group)
 
         # Make the details section scrollable
         details_scroll = QScrollArea()
@@ -101,9 +187,11 @@ class InstrumentDetailsDialog(QMainWindow):
         cursor.execute("""
             SELECT 
                 mr.maintenance_date,
+                mt.name as maintenance_type,
                 u.username as performed_by,
                 mr.notes
             FROM maintenance_records mr
+            JOIN maintenance_types mt ON mr.maintenance_type_id = mt.id
             JOIN users u ON mr.performed_by = u.id
             WHERE mr.instrument_id = ?
             ORDER BY mr.maintenance_date DESC
@@ -111,14 +199,16 @@ class InstrumentDetailsDialog(QMainWindow):
         history = cursor.fetchall()
 
         history_table = QTableWidget()
-        history_table.setColumnCount(3)
-        history_table.setHorizontalHeaderLabels(['Date', 'Performed By', 'Notes'])
+        history_table.setColumnCount(4)
+        history_table.setHorizontalHeaderLabels(['Date', 'Type', 'Performed By', 'Notes'])
         history_table.setRowCount(len(history))
 
         for row, record in enumerate(history):
             for col, value in enumerate(record):
                 item = QTableWidgetItem(str(value))
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                if col == 0:  # Date column
+                    item.setText(format_date_for_display(value))
                 history_table.setItem(row, col, item)
 
         history_table.resizeColumnsToContents()
@@ -131,9 +221,10 @@ class InstrumentDetailsDialog(QMainWindow):
         # Buttons
         button_layout = QHBoxLayout()
         
-        add_maintenance_button = QPushButton('Add Maintenance Record')
-        add_maintenance_button.clicked.connect(self.add_maintenance)
-        button_layout.addWidget(add_maintenance_button)
+        if self.is_admin:
+            add_maintenance_button = QPushButton('Add Maintenance Record')
+            add_maintenance_button.clicked.connect(self.add_maintenance)
+            button_layout.addWidget(add_maintenance_button)
 
         close_button = QPushButton('Close')
         close_button.clicked.connect(self.close)
@@ -263,11 +354,11 @@ class InstrumentsTableModel(QAbstractTableModel):
 class InstrumentsWindow(QWidget):
     back_signal = pyqtSignal()  # Signal to go back to main menu
 
-    def __init__(self, user_id, is_admin, db=None):
-        super().__init__()
+    def __init__(self, user_id, is_admin, parent=None):
+        super().__init__(parent)
         self.user_id = user_id
         self.is_admin = is_admin
-        self.db = db if db else Database()
+        self.db = Database()
         self.init_ui()
         self.apply_dark_theme()
         self.load_instruments()
@@ -342,7 +433,7 @@ class InstrumentsWindow(QWidget):
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setAlternatingRowColors(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setStretchLastSection(False)  # Disable stretch on last section
+        self.table.horizontalHeader().setStretchLastSection(False)  # Changed to False to allow proper resizing
         
         # Add table to layout with stretch factor to make it expand
         layout.addWidget(self.table, 1)
@@ -372,57 +463,129 @@ class InstrumentsWindow(QWidget):
         layout.addLayout(button_layout)
 
     def load_instruments(self):
-        cursor = self.db.conn.cursor()
-        today = datetime.now().strftime('%Y-%m-%d')
-        
-        cursor.execute("""
-            SELECT 
-                i.*, 
-                u.username as responsible_user,
-                COALESCE(
-                    (SELECT MAX(maintenance_date)
-                     FROM maintenance_records mr
-                     WHERE mr.instrument_id = i.id),
-                    ?
-                ) as last_maintenance,
-                (
-                    SELECT MIN(
-                        CASE 
-                            WHEN r.maintenance_date IS NULL THEN datetime(?, '+' || s.period_days || ' days')
-                            ELSE datetime(r.maintenance_date, '+' || s.period_days || ' days')
-                        END
-                    )
-                    FROM instrument_maintenance_schedule s
-                    LEFT JOIN (
-                        SELECT instrument_id, maintenance_type_id, MAX(maintenance_date) as maintenance_date
-                        FROM maintenance_records
-                        GROUP BY instrument_id, maintenance_type_id
-                    ) r ON s.instrument_id = r.instrument_id AND s.maintenance_type_id = r.maintenance_type_id
-                    WHERE s.instrument_id = i.id
-                ) as next_maintenance
-            FROM instruments i
-            LEFT JOIN users u ON i.responsible_user_id = u.id
-            ORDER BY i.name
-        """, (today, today))
-        instruments = cursor.fetchall()
+        try:
+            cursor = self.db.conn.cursor()
+            cursor.execute("""
+                WITH maintenance_dates AS (
+                    SELECT 
+                        instrument_id,
+                        maintenance_type_id,
+                        MAX(maintenance_date) as last_date
+                    FROM maintenance_records
+                    GROUP BY instrument_id, maintenance_type_id
+                )
+                SELECT i.*, u.username as responsible_username,
+                       mt1.name as maintenance_type_1,
+                       mt2.name as maintenance_type_2,
+                       mt3.name as maintenance_type_3,
+                       CASE 
+                           WHEN md1.last_date IS NULL THEN 'Never'
+                           ELSE date(md1.last_date)
+                       END as last_maintenance_1,
+                       CASE 
+                           WHEN md2.last_date IS NULL THEN 'Never'
+                           ELSE date(md2.last_date)
+                       END as last_maintenance_2,
+                       CASE 
+                           WHEN md3.last_date IS NULL THEN 'Never'
+                           ELSE date(md3.last_date)
+                       END as last_maintenance_3,
+                       CASE 
+                           WHEN i.maintenance_1 IS NOT NULL AND i.period_1 IS NOT NULL THEN
+                               CASE 
+                                   WHEN md1.last_date IS NULL THEN
+                                       date(i.date_start_operating)
+                                   ELSE
+                                       date(md1.last_date, '+' || (i.period_1 * 7) || ' days')
+                               END
+                           ELSE NULL
+                       END as next_maintenance_1,
+                       CASE 
+                           WHEN i.maintenance_2 IS NOT NULL AND i.period_2 IS NOT NULL THEN
+                               CASE 
+                                   WHEN md2.last_date IS NULL THEN
+                                       date(i.date_start_operating)
+                                   ELSE
+                                       date(md2.last_date, '+' || (i.period_2 * 7) || ' days')
+                               END
+                           ELSE NULL
+                       END as next_maintenance_2,
+                       CASE 
+                           WHEN i.maintenance_3 IS NOT NULL AND i.period_3 IS NOT NULL THEN
+                               CASE 
+                                   WHEN md3.last_date IS NULL THEN
+                                       date(i.date_start_operating)
+                                   ELSE
+                                       date(md3.last_date, '+' || (i.period_3 * 7) || ' days')
+                               END
+                           ELSE NULL
+                       END as next_maintenance_3
+                FROM instruments i
+                LEFT JOIN users u ON i.responsible_user_id = u.id
+                LEFT JOIN maintenance_types mt1 ON i.maintenance_1 = mt1.id
+                LEFT JOIN maintenance_types mt2 ON i.maintenance_2 = mt2.id
+                LEFT JOIN maintenance_types mt3 ON i.maintenance_3 = mt3.id
+                LEFT JOIN maintenance_dates md1 ON i.id = md1.instrument_id AND i.maintenance_1 = md1.maintenance_type_id
+                LEFT JOIN maintenance_dates md2 ON i.id = md2.instrument_id AND i.maintenance_2 = md2.maintenance_type_id
+                LEFT JOIN maintenance_dates md3 ON i.id = md3.instrument_id AND i.maintenance_3 = md3.maintenance_type_id
+                ORDER BY i.name
+            """)
+            
+            instruments = cursor.fetchall()
 
-        self.table.setRowCount(len(instruments))
-        for row, instrument in enumerate(instruments):
-            # Create items for each column
-            for col in range(self.table.columnCount()):
-                if col == 7:  # Responsible User column
-                    value = instrument['responsible_user'] or 'Not assigned'
-                elif col == 8:  # Next Maintenance column
-                    value = str(instrument['next_maintenance'] or 'Not scheduled')
-                else:
-                    value = str(instrument[col])
+            self.table.setRowCount(len(instruments))
+            for i, instrument in enumerate(instruments):
+                # Calculate the earliest next maintenance date
+                next_maintenance_dates = [
+                    instrument['next_maintenance_1'],
+                    instrument['next_maintenance_2'],
+                    instrument['next_maintenance_3']
+                ]
+                next_maintenance_dates = [d for d in next_maintenance_dates if d is not None]
+                next_maintenance = min(next_maintenance_dates) if next_maintenance_dates else None
+
+                # Format dates for display
+                last_maintenance_1_display = format_date_for_display(instrument['last_maintenance_1']) if instrument['last_maintenance_1'] != 'Never' else 'Never'
+                last_maintenance_2_display = format_date_for_display(instrument['last_maintenance_2']) if instrument['last_maintenance_2'] != 'Never' else 'Never'
+                last_maintenance_3_display = format_date_for_display(instrument['last_maintenance_3']) if instrument['last_maintenance_3'] != 'Never' else 'Never'
+                next_maintenance_display = format_date_for_display(next_maintenance) if next_maintenance else 'Not scheduled'
+
+                # Add data to table - setting each item individually to ensure proper formatting
+                self.table.setItem(i, 0, QTableWidgetItem(str(instrument['name'])))
+                self.table.setItem(i, 1, QTableWidgetItem(str(instrument['model'])))
+                self.table.setItem(i, 2, QTableWidgetItem(str(instrument['serial_number'])))
+                self.table.setItem(i, 3, QTableWidgetItem(str(instrument['location'])))
+                self.table.setItem(i, 4, QTableWidgetItem(str(instrument['brand'])))
+                self.table.setItem(i, 5, QTableWidgetItem(str(instrument['status'])))
+                self.table.setItem(i, 6, QTableWidgetItem(str(instrument['responsible_username'] or 'Not assigned')))
+                self.table.setItem(i, 7, QTableWidgetItem(last_maintenance_1_display))
+                self.table.setItem(i, 8, QTableWidgetItem(last_maintenance_2_display))
+                self.table.setItem(i, 9, QTableWidgetItem(last_maintenance_3_display))
+                self.table.setItem(i, 10, QTableWidgetItem(next_maintenance_display))
+                self.table.setItem(i, 11, QTableWidgetItem(str(instrument['maintenance_type_1'] or '')))
+                self.table.setItem(i, 12, QTableWidgetItem(str(instrument['period_1']) if instrument['period_1'] else ''))
+                self.table.setItem(i, 13, QTableWidgetItem(str(instrument['maintenance_type_2'] or '')))
+                self.table.setItem(i, 14, QTableWidgetItem(str(instrument['period_2']) if instrument['period_2'] else ''))
+                self.table.setItem(i, 15, QTableWidgetItem(str(instrument['maintenance_type_3'] or '')))
+                self.table.setItem(i, 16, QTableWidgetItem(str(instrument['period_3']) if instrument['period_3'] else ''))
+
+                # Set alignment for all items
+                for col in range(self.table.columnCount()):
+                    self.table.item(i, col).setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 
-                item = QTableWidgetItem(value)
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, col, item)
+                # Set row color based on maintenance status
+                if next_maintenance and next_maintenance < datetime.now():
+                    for col in range(self.table.columnCount()):
+                        self.table.item(i, col).setBackground(QColor('red'))
 
-        # Resize columns to content
-        self.table.resizeColumnsToContents()
+                # Store instrument_id in the first column for later use
+                self.table.item(i, 0).setData(Qt.ItemDataRole.UserRole, instrument['id'])
+
+            # Resize columns to content
+            self.table.resizeColumnsToContents()
+
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Failed to load instruments: {str(e)}')
 
     def show_instrument_details(self):
         selected_row = self.table.currentRow()
@@ -440,5 +603,15 @@ class InstrumentsWindow(QWidget):
         """Update the user information when returning to this view"""
         self.user_id = user_id
         self.is_admin = is_admin
-        self.init_ui()  # Reinitialize UI to update buttons
-        self.load_instruments()  # Reload instruments 
+        
+        # Update buttons visibility
+        if hasattr(self, 'add_button'):
+            self.add_button.setVisible(self.is_admin)
+        
+        # Reload data
+        self.load_instruments()
+
+    def showEvent(self, event):
+        """Handle window show event"""
+        super().showEvent(event)
+        self.load_instruments()  # Refresh data when window is shown 

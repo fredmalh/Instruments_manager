@@ -194,7 +194,7 @@ class UsersWindow(QWidget):
         self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(False)
         layout.addWidget(self.table)
 
@@ -241,7 +241,10 @@ class UsersWindow(QWidget):
         self.table.setRowCount(len(users))
         for row, user in enumerate(users):
             for col, value in enumerate(user):
-                item = QTableWidgetItem(str(value))
+                if col == 3:  # Role column (is_admin)
+                    item = QTableWidgetItem("Admin" if value else "Normal User")
+                else:
+                    item = QTableWidgetItem(str(value))
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, col, item)
 

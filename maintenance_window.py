@@ -1,11 +1,18 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                             QPushButton, QTableWidget, QTableWidgetItem, QLabel,
                             QMessageBox, QDialog, QLineEdit, QFormLayout, QComboBox,
-                            QTextEdit, QSplitter, QHeaderView, QSizePolicy)
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+                            QTextEdit, QSplitter, QHeaderView, QSizePolicy, QMainWindow)
+from PyQt6.QtCore import Qt, pyqtSignal, QDate
+from PyQt6.QtGui import QFont, QColor
 from database import Database
 from datetime import datetime, timedelta
+from date_utils import (
+    calculate_next_maintenance,
+    format_date_for_display,
+    format_date_for_db,
+    get_maintenance_status
+)
+import sys
 
 class MaintenanceDetailsDialog(QDialog):
     def __init__(self, maintenance_id, user_id, is_admin, parent=None):
@@ -26,7 +33,11 @@ class MaintenanceDetailsDialog(QDialog):
             SELECT 
                 i.name as instrument_name,
                 mt.name as maintenance_type,
-                ims.period_days,
+                CASE 
+                    WHEN i.maintenance_1 = mt.id THEN i.period_1
+                    WHEN i.maintenance_2 = mt.id THEN i.period_2
+                    WHEN i.maintenance_3 = mt.id THEN i.period_3
+                END as period_days,
                 COALESCE(
                     (SELECT MAX(maintenance_date)
                      FROM maintenance_records mr
@@ -49,13 +60,16 @@ class MaintenanceDetailsDialog(QDialog):
                              FROM maintenance_records mr
                              WHERE mr.instrument_id = i.id
                              AND mr.maintenance_type_id = mt.id),
-                            '+' || ims.period_days || ' days'
+                            '+' || (CASE 
+                                WHEN i.maintenance_1 = mt.id THEN i.period_1
+                                WHEN i.maintenance_2 = mt.id THEN i.period_2
+                                WHEN i.maintenance_3 = mt.id THEN i.period_3
+                            END * 7) || ' days'
                         )
                 END as next_maintenance,
                 u.username as responsible_user
             FROM instruments i
             JOIN maintenance_types mt ON mt.id = ?
-            JOIN instrument_maintenance_schedule ims ON i.id = ims.instrument_id AND mt.id = ims.maintenance_type_id
             LEFT JOIN users u ON i.responsible_user_id = u.id
             WHERE i.id = ?
         """, (self.maintenance_id, self.maintenance_id))
@@ -191,7 +205,7 @@ class AddMaintenanceDialog(QDialog):
         except Exception as e:
             QMessageBox.warning(self, 'Error', str(e))
 
-class MaintenanceWindow(QWidget):
+class MaintenanceWindow(QMainWindow):
     back_signal = pyqtSignal()  # Signal to go back to main menu
 
     def __init__(self, user_id, is_admin, db=None):
@@ -201,7 +215,7 @@ class MaintenanceWindow(QWidget):
         self.db = db if db else Database()
         self.init_ui()
         self.apply_dark_theme()
-        self.load_maintenance_schedule()
+        self.load_maintenance_data()
 
     def apply_dark_theme(self):
         self.setStyleSheet("""
@@ -251,7 +265,10 @@ class MaintenanceWindow(QWidget):
         """)
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
+        # Create central widget and main layout
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        layout = QVBoxLayout(central_widget)
         layout.setSpacing(10)
         layout.setContentsMargins(10, 10, 10, 10)
 
@@ -262,11 +279,11 @@ class MaintenanceWindow(QWidget):
 
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(12)  # Increased to 12 columns
+        self.table.setColumnCount(10)  # Adjusted to match our data
         self.table.setHorizontalHeaderLabels([
             'Instrument', 'Brand', 'Model', 'Serial Number', 'Location', 
             'Maintenance Type', 'Performed By', 'Last Maintenance', 
-            'Notes', 'Period (weeks)', 'Next Maintenance', 'Next Maintenance Operation'
+            'Next Maintenance', 'Notes'
         ])
         self.table.doubleClicked.connect(self.show_maintenance_details)
         
@@ -276,8 +293,8 @@ class MaintenanceWindow(QWidget):
         self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 
         # Bottom buttons
@@ -286,12 +303,12 @@ class MaintenanceWindow(QWidget):
         
         # Create buttons with fixed width
         if self.is_admin:
-            self.add_button = QPushButton('Add Maintenance Schedule')
-            self.add_button.clicked.connect(self.add_maintenance_schedule)
+            self.add_button = QPushButton('Add Maintenance Record')
+            self.add_button.clicked.connect(self.add_maintenance_record)
             self.add_button.setFixedWidth(200)
 
         refresh_button = QPushButton('Refresh')
-        refresh_button.clicked.connect(self.load_maintenance_schedule)
+        refresh_button.clicked.connect(self.load_maintenance_data)
         refresh_button.setFixedWidth(200)
 
         back_button = QPushButton('Back to Main Menu')
@@ -315,7 +332,7 @@ class MaintenanceWindow(QWidget):
         for button in self.findChildren(QPushButton):
             button.setFixedWidth(button_width)
 
-    def load_maintenance_schedule(self):
+    def load_maintenance_data(self):
         try:
             cursor = self.db.conn.cursor()
             cursor.execute("""
@@ -339,86 +356,150 @@ class MaintenanceWindow(QWidget):
                         WHEN i.maintenance_1 = mt.id THEN i.period_1
                         WHEN i.maintenance_2 = mt.id THEN i.period_2
                         WHEN i.maintenance_3 = mt.id THEN i.period_3
-                    END as period_weeks
+                    END as period_weeks,
+                    i.date_start_operating
                 FROM instruments i
                 JOIN maintenance_types mt ON mt.id IN (i.maintenance_1, i.maintenance_2, i.maintenance_3)
                 LEFT JOIN users u ON i.responsible_user_id = u.id
                 WHERE i.status = 'Operational'
                 ORDER BY i.name, mt.name
             """)
-            schedules = cursor.fetchall()
-
-            self.table.setRowCount(len(schedules))
-            self.table.setColumnCount(12)
-            self.table.setHorizontalHeaderLabels([
-                'Instrument', 'Brand', 'Model', 'Serial Number', 'Location', 
-                'Maintenance Type', 'Performed By', 'Last Maintenance', 
-                'Notes', 'Period (weeks)', 'Next Maintenance', 'Next Maintenance Operation'
-            ])
-
-            for row, schedule in enumerate(schedules):
-                # Get the values we need for calculations
-                last_maintenance = schedule[8]  # last_maintenance column
-                period_weeks = schedule[10]     # period_weeks column
+            
+            self.table.setRowCount(0)
+            for row, data in enumerate(cursor.fetchall()):
+                self.table.insertRow(row)
                 
-                for col, value in enumerate(schedule[1:]):  # Skip the ID column
-                    item = QTableWidgetItem(str(value or ''))
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                    
-                    # For the next maintenance column, calculate the date
-                    if col == 10:  # Next maintenance column
-                        if last_maintenance and period_weeks:
-                            try:
-                                last_date = datetime.strptime(last_maintenance, '%Y-%m-%d')
-                                next_date = last_date + timedelta(weeks=int(period_weeks))
-                                next_maintenance = next_date.strftime('%Y-%m-%d')
-                                
-                                # Color code based on how soon maintenance is due
-                                days_until_next = (next_date - datetime.now()).days
-                                if days_until_next < 0:
-                                    item.setForeground(Qt.GlobalColor.red)  # Overdue
-                                elif days_until_next <= 7:
-                                    item.setForeground(Qt.GlobalColor.yellow)  # Due within a week
-                                else:
-                                    item.setForeground(Qt.GlobalColor.green)  # On schedule
-                                
-                                item.setText(next_maintenance)
-                            except (ValueError, TypeError):
-                                item.setText('Invalid date')
-                        else:
-                            item.setText('Not scheduled')
-                    
-                    # For the next maintenance operation column, show the last maintenance date
-                    elif col == 11:  # Next Maintenance Operation column
-                        if last_maintenance:
-                            item.setText(str(last_maintenance))
-                        else:
-                            item.setText('Never')
-                    
-                    self.table.setItem(row, col, item)
-
-            # Resize columns to content
-            self.table.resizeColumnsToContents()
-
+                # Calculate next maintenance date using our utility function
+                next_maintenance = calculate_next_maintenance(
+                    data['last_maintenance'],
+                    data['period_weeks'],
+                    data['date_start_operating']
+                )
+                
+                # Get maintenance status using our utility function
+                status, color = get_maintenance_status(next_maintenance)
+                
+                # Format dates for display
+                last_maintenance_display = format_date_for_display(data['last_maintenance'])
+                next_maintenance_display = format_date_for_display(next_maintenance)
+                
+                # Add data to table
+                self.table.setItem(row, 0, QTableWidgetItem(str(data['name'])))
+                self.table.setItem(row, 1, QTableWidgetItem(str(data['brand'])))
+                self.table.setItem(row, 2, QTableWidgetItem(str(data['model'])))
+                self.table.setItem(row, 3, QTableWidgetItem(str(data['serial_number'])))
+                self.table.setItem(row, 4, QTableWidgetItem(str(data['location'])))
+                self.table.setItem(row, 5, QTableWidgetItem(str(data['maintenance_type'])))
+                self.table.setItem(row, 6, QTableWidgetItem(str(data['performed_by'] or 'Not assigned')))
+                self.table.setItem(row, 7, QTableWidgetItem(last_maintenance_display))
+                self.table.setItem(row, 8, QTableWidgetItem(next_maintenance_display))
+                self.table.setItem(row, 9, QTableWidgetItem(str(data['notes'] or '')))
+                
+                # Store instrument_id in the first column for later use
+                self.table.item(row, 0).setData(Qt.ItemDataRole.UserRole, data['id'])
+                
+                # Set row color based on maintenance status
+                if color:
+                    for col in range(self.table.columnCount()):
+                        self.table.item(row, col).setBackground(QColor(color))
+                
         except Exception as e:
-            QMessageBox.warning(self, 'Error', f'Failed to load maintenance schedule: {str(e)}')
+            QMessageBox.critical(self, 'Error', f'Failed to load maintenance data: {str(e)}')
 
     def show_maintenance_details(self):
         selected_row = self.table.currentRow()
         if selected_row >= 0:
-            maintenance_id = int(self.table.item(selected_row, 0).text())
-            dialog = MaintenanceDetailsDialog(maintenance_id, self.user_id, self.is_admin, self)
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                self.load_maintenance_schedule()
+            try:
+                # Get the instrument name and maintenance type
+                instrument_name = self.table.item(selected_row, 0).text()
+                maintenance_type = self.table.item(selected_row, 5).text()
+                
+                # Get the instrument_id and maintenance_type_id from the database
+                cursor = self.db.conn.cursor()
+                cursor.execute("""
+                    SELECT i.id as instrument_id, mt.id as maintenance_type_id
+                    FROM instruments i
+                    JOIN maintenance_types mt ON mt.name = ?
+                    WHERE i.name = ?
+                """, (maintenance_type, instrument_name))
+                result = cursor.fetchone()
+                
+                if result:
+                    dialog = MaintenanceDetailsDialog(result['maintenance_type_id'], self.user_id, self.is_admin, self)
+                    if dialog.exec() == QDialog.DialogCode.Accepted:
+                        self.load_maintenance_data()
+                else:
+                    QMessageBox.warning(self, 'Error', 'Could not find maintenance details')
+            except Exception as e:
+                QMessageBox.warning(self, 'Error', f'Failed to show maintenance details: {str(e)}')
 
-    def add_maintenance_schedule(self):
-        # TODO: Implement add functionality
-        QMessageBox.information(self, 'Coming Soon', 'Add functionality will be implemented soon.')
+    def add_maintenance_record(self):
+        try:
+            selected_row = self.table.currentRow()
+            if selected_row < 0:
+                QMessageBox.warning(self, 'Warning', 'Please select an instrument first')
+                return
+                
+            instrument_id = self.table.item(selected_row, 0).data(Qt.ItemDataRole.UserRole)
+            maintenance_type = self.table.item(selected_row, 5).text()
+            
+            dialog = MaintenanceRecordDialog(self.db, instrument_id, maintenance_type)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.load_maintenance_data()
+                
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Failed to add maintenance record: {str(e)}')
 
     def update_user(self, user_id, is_admin):
         """Update the user information when returning to this view"""
         self.user_id = user_id
         self.is_admin = is_admin
-        self.init_ui()  # Reinitialize UI to update buttons
-        self.load_maintenance_schedule()  # Reload maintenance data 
+        
+        # Update buttons visibility
+        if hasattr(self, 'add_button'):
+            self.add_button.setVisible(self.is_admin)
+        
+        # Reload data
+        self.load_maintenance_data()
+
+    def showEvent(self, event):
+        """Handle window show event"""
+        super().showEvent(event)
+        self.load_maintenance_data()  # Refresh data when window is shown
+
+class MaintenanceRecordDialog(QDialog):
+    def __init__(self, db, instrument_id, maintenance_type):
+        super().__init__()
+        self.db = db
+        self.instrument_id = instrument_id
+        self.maintenance_type = maintenance_type
+        self.init_ui()
+        
+    def init_ui(self):
+        self.setWindowTitle('Add Maintenance Record')
+        layout = QFormLayout()
+        
+        # ... existing code ...
+        
+    def accept(self):
+        try:
+            cursor = self.db.conn.cursor()
+            
+            # Get maintenance type ID
+            cursor.execute("SELECT id FROM maintenance_types WHERE name = ?", (self.maintenance_type,))
+            maintenance_type_id = cursor.fetchone()['id']
+            
+            # Format date for database storage
+            maintenance_date = format_date_for_db(self.date_edit.date().toString('dd-MM-yyyy'))
+            
+            cursor.execute("""
+                INSERT INTO maintenance_records (instrument_id, maintenance_type_id, performed_by, maintenance_date, notes)
+                VALUES (?, ?, ?, ?, ?)
+            """, (self.instrument_id, maintenance_type_id, self.performed_by.currentData(), 
+                  maintenance_date, self.notes.toPlainText()))
+            
+            self.db.conn.commit()
+            super().accept()
+            
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Failed to add maintenance record: {str(e)}') 
