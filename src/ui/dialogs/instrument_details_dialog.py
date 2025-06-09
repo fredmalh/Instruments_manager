@@ -86,7 +86,7 @@ class InstrumentDetailsDialog(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle('Instrument Details')
-        self.setMinimumSize(1000, 800)
+        self.setMinimumSize(1000, 600)  # Reduced height since we're making tables more compact
         
         # Set default font for the dialog and all its children
         default_font = QFont('Arial', 10)
@@ -128,6 +128,9 @@ class InstrumentDetailsDialog(QMainWindow):
         self.date_start_input = QLineEdit()
         self.date_start_input.setPlaceholderText("DD-MM-YYYY")
 
+        # Load users into responsible_user dropdown
+        self.load_users()
+
         # Add fields to left column
         left_column.addRow('Name:', self.name_input)
         left_column.addRow('Model:', self.model_input)
@@ -159,6 +162,9 @@ class InstrumentDetailsDialog(QMainWindow):
         self.period2_input = QLineEdit()
         self.period3_input = QLineEdit()
 
+        # Load maintenance types into dropdowns
+        self.load_maintenance_types()
+
         # Add maintenance fields
         maintenance_layout.addRow('Maintenance Type 1:', self.maintenance_type1)
         maintenance_layout.addRow('Period 1 (weeks):', self.period1_input)
@@ -180,10 +186,17 @@ class InstrumentDetailsDialog(QMainWindow):
 
         # Create schedule table
         self.schedule_table = QTableWidget()
-        self.schedule_table.setColumnCount(3)
-        self.schedule_table.setHorizontalHeaderLabels(['Type', 'Period (weeks)', 'Last Maintenance'])
+        self.schedule_table.setColumnCount(4)
+        self.schedule_table.setHorizontalHeaderLabels(['Type', 'Period (weeks)', 'Last Maintenance', 'Next Maintenance'])
         self.schedule_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.schedule_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        
+        # Set fixed height for schedule table (3 rows)
+        header_height = self.schedule_table.horizontalHeader().height()
+        row_height = 35  # Height for each row
+        spacing = 2  # Spacing between rows
+        padding = 10  # Additional padding
+        self.schedule_table.setFixedHeight(header_height + (row_height * 3) + (spacing * 2) + padding)
 
         schedule_layout.addWidget(self.schedule_table)
         schedule_group.setLayout(schedule_layout)
@@ -200,13 +213,16 @@ class InstrumentDetailsDialog(QMainWindow):
         self.history_table.setHorizontalHeaderLabels(['Date', 'Type', 'Performed By', 'Notes'])
         self.history_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.history_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.history_table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
+        self.history_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # Set fixed height for history table (10 rows)
+        # Set fixed height for history table (6 rows)
         header_height = self.history_table.horizontalHeader().height()
         row_height = 35  # Height for each row
         spacing = 2  # Spacing between rows
         padding = 10  # Additional padding
-        self.history_table.setFixedHeight(header_height + (row_height * 10) + (spacing * 9) + padding)
+        self.history_table.setFixedHeight(header_height + (row_height * 6) + (spacing * 5) + padding)
         
         history_layout.addWidget(self.history_table)
         history_group.setLayout(history_layout)
@@ -218,18 +234,21 @@ class InstrumentDetailsDialog(QMainWindow):
         self.save_button = QPushButton('Save Changes')
         self.cancel_button = QPushButton('Cancel')
         add_maintenance_button = QPushButton('Add Maintenance Record')
+        delete_maintenance_button = QPushButton('Delete Maintenance Record')
         close_button = QPushButton('Close')
 
         # Set font for all buttons
         button_font = QFont('Arial', 10, QFont.Weight.Medium)
         for button in [self.edit_button, self.save_button, self.cancel_button, 
-                      add_maintenance_button, close_button]:
+                      add_maintenance_button, delete_maintenance_button, close_button]:
             button.setFont(button_font)
 
-        # Only show add maintenance button if user is admin or responsible for the instrument
+        # Only show add/delete maintenance buttons if user is admin or responsible for the instrument
         if self.is_admin or self.is_responsible_user():
             add_maintenance_button.clicked.connect(self.add_maintenance)
+            delete_maintenance_button.clicked.connect(self.delete_maintenance)
             buttons_layout.addWidget(add_maintenance_button)
+            buttons_layout.addWidget(delete_maintenance_button)
 
         self.edit_button.clicked.connect(lambda: self.set_edit_mode(True))
         self.save_button.clicked.connect(self.save_changes)
@@ -261,12 +280,10 @@ class InstrumentDetailsDialog(QMainWindow):
         self.period2_input.setReadOnly(not edit_mode)
         self.period3_input.setReadOnly(not edit_mode)
 
-        # Set table edit triggers based on edit mode
+        # Set history table edit triggers based on edit mode
         if edit_mode:
-            self.schedule_table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
             self.history_table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
         else:
-            self.schedule_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
             self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
         # Show/hide appropriate buttons
@@ -338,36 +355,6 @@ class InstrumentDetailsDialog(QMainWindow):
                 maint_type2, period2, maint_type3, period3,
                 self.instrument_id
             ))
-            
-            # Save changes to maintenance schedule table
-            for row in range(self.schedule_table.rowCount()):
-                type_name = self.schedule_table.item(row, 0).text()
-                period = self.schedule_table.item(row, 1).text()
-                last_maintenance = self.schedule_table.item(row, 2).text()
-                
-                # Get maintenance type ID
-                cursor.execute("SELECT id FROM maintenance_types WHERE name = ?", (type_name,))
-                maint_type = cursor.fetchone()
-                if maint_type:
-                    maint_type_id = maint_type['id']
-                    
-                    # If last maintenance date was changed
-                    if last_maintenance != 'Never':
-                        try:
-                            # Convert DD-MM-YYYY to YYYY-MM-DD
-                            day, month, year = last_maintenance.split('-')
-                            last_maintenance = f"{year}-{month}-{day}"
-                            
-                            # Update or insert maintenance record
-                            cursor.execute("""
-                                INSERT OR REPLACE INTO maintenance_records 
-                                (instrument_id, maintenance_type_id, maintenance_date, performed_by, notes)
-                                VALUES (?, ?, ?, ?, ?)
-                            """, (self.instrument_id, maint_type_id, last_maintenance, 
-                                 responsible_user_id, "Updated maintenance date"))
-                        except ValueError:
-                            QMessageBox.warning(self, 'Error', 'Please enter valid dates in DD-MM-YYYY format')
-                            return
 
             self.db.conn.commit()
             self.set_edit_mode(False)  # Return to read-only mode
@@ -472,10 +459,14 @@ class InstrumentDetailsDialog(QMainWindow):
 
                 self.schedule_table.setRowCount(len(rows))
                 for i, (type_name, period, last_maintenance) in enumerate(rows):
+                    # Calculate next maintenance date
+                    next_maintenance = calculate_next_maintenance(last_maintenance, period)
+                    
                     for col, value in enumerate([
                         type_name,
                         str(period),
-                        str(last_maintenance or 'Never')
+                        str(last_maintenance or 'Never'),
+                        str(next_maintenance or 'N/A')
                     ]):
                         item = QTableWidgetItem(value)
                         item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -532,4 +523,80 @@ class InstrumentDetailsDialog(QMainWindow):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.load_instrument_data()  # Refresh the data
         except Exception as e:
-            QMessageBox.critical(self, 'Error', f'Failed to add maintenance record: {str(e)}') 
+            QMessageBox.critical(self, 'Error', f'Failed to add maintenance record: {str(e)}')
+
+    def delete_maintenance(self):
+        """Delete the selected maintenance record"""
+        try:
+            # Get selected row
+            selected_rows = self.history_table.selectedItems()
+            if not selected_rows:
+                QMessageBox.warning(self, 'Warning', 'Please select a maintenance record to delete')
+                return
+            
+            # Get the row index of the first selected item
+            row = selected_rows[0].row()
+            
+            # Get the maintenance date and type from the selected row
+            date = self.history_table.item(row, 0).text()
+            maint_type = self.history_table.item(row, 1).text()
+            
+            # Confirm deletion
+            reply = QMessageBox.question(
+                self, 'Confirm Deletion',
+                f'Are you sure you want to delete the maintenance record?\n\n'
+                f'Date: {date}\nType: {maint_type}',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                cursor = self.db.conn.cursor()
+                
+                # Delete the record
+                cursor.execute("""
+                    DELETE FROM maintenance_records 
+                    WHERE instrument_id = ? 
+                    AND maintenance_date = ?
+                    AND maintenance_type_id = (
+                        SELECT id FROM maintenance_types WHERE name = ?
+                    )
+                """, (self.instrument_id, date, maint_type))
+                
+                self.db.conn.commit()
+                self.load_instrument_data()  # Refresh the data
+                
+                QMessageBox.information(self, 'Success', 'Maintenance record deleted successfully')
+                
+        except Exception as e:
+            self.db.conn.rollback()
+            QMessageBox.warning(self, 'Error', f'Failed to delete maintenance record: {str(e)}')
+
+    def load_users(self):
+        """Load users into the responsible_user dropdown"""
+        try:
+            cursor = self.db.conn.cursor()
+            cursor.execute("SELECT id, username FROM users ORDER BY username")
+            users = cursor.fetchall()
+            
+            self.responsible_user.clear()
+            for user in users:
+                self.responsible_user.addItem(user['username'], user['id'])
+        except Exception as e:
+            self.show_error('Error', f'Failed to load users: {str(e)}')
+
+    def load_maintenance_types(self):
+        """Load maintenance types into the maintenance type dropdowns"""
+        try:
+            cursor = self.db.conn.cursor()
+            cursor.execute("SELECT id, name FROM maintenance_types ORDER BY name")
+            types = cursor.fetchall()
+            
+            # Clear and populate all three dropdowns
+            for combo in [self.maintenance_type1, self.maintenance_type2, self.maintenance_type3]:
+                combo.clear()
+                combo.addItem("", None)  # Add empty option
+                for type_ in types:
+                    combo.addItem(type_['name'], type_['id'])
+        except Exception as e:
+            self.show_error('Error', f'Failed to load maintenance types: {str(e)}') 
