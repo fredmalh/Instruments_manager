@@ -1,41 +1,47 @@
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                            QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-                            QDialog, QLineEdit, QComboBox, QTextEdit, QMessageBox,
-                            QFormLayout, QGroupBox, QHeaderView, QSizePolicy)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
+                            QPushButton, QLabel, QMessageBox, QMainWindow)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtGui import QFont
 from database import Database
-from datetime import datetime
-from date_utils import format_date_for_display, get_maintenance_status
-from ..base.base_main_window import BaseMainWindow
-from ..base.base_table import BaseTable
+from datetime import datetime, timedelta
+from date_utils import (
+    calculate_next_maintenance,
+    format_date_for_display,
+    format_date_for_db,
+    get_maintenance_status
+)
+from src.ui.dialogs.instrument_details_dialog import InstrumentDetailsDialog
+from src.ui.base.base_table import BaseTable
+from ..base.base_data_window import BaseDataWindow
+import sys
 
-class MaintenanceWindow(BaseMainWindow):
-    back_signal = pyqtSignal()
+class MaintenanceWindow(BaseDataWindow):
+    back_signal = pyqtSignal()  # Signal to go back to main menu
+
+    def __init__(self, user_id, is_admin, db=None):
+        super().__init__(user_id, is_admin, db)
+        self.init_ui()
 
     def init_ui(self):
         super().init_ui()
 
         # Create title
-        self.create_title('Maintenance Records')
+        self.create_title('Maintenance Operations')
 
         # Create table
         self.table = BaseTable()
         self.table.set_headers([
-            'Instrument', 'Maintenance Type', 'Last Maintenance',
-            'Next Maintenance', 'Status', 'Responsible User'
+            'Instrument', 'Brand', 'Model', 'Serial Number', 'Location', 
+            'Maintenance Type', 'Performed By', 'Last Maintenance', 
+            'Next Maintenance', 'Notes'
         ])
-        self.table.row_double_clicked.connect(self.show_maintenance_details)
+        
+        # Connect cell click event
+        self.table.cellClicked.connect(self.handle_cell_click)
         self.main_layout.addWidget(self.table)
 
         # Create buttons using standardized layout
         buttons_config = [
-            {
-                'text': 'Add Maintenance Record',
-                'callback': self.add_maintenance,
-                'visible_if_admin': True,
-                'position': 'left'
-            },
             {
                 'text': 'Refresh',
                 'callback': self.load_data,
@@ -49,10 +55,16 @@ class MaintenanceWindow(BaseMainWindow):
         ]
         self.main_layout.addLayout(self.create_button_layout(buttons_config))
 
-        # Load initial data
-        self.load_data()
+    def handle_cell_click(self, row, column):
+        """Handle cell click events"""
+        if column == 0:  # Only handle clicks on the Instrument column
+            instrument_id = self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+            if instrument_id:
+                dialog = InstrumentDetailsDialog(instrument_id, self.user_id, self.is_admin, self)
+                dialog.show()
 
     def load_data(self):
+        """Load maintenance data"""
         try:
             cursor = self.db.conn.cursor()
             cursor.execute("""
@@ -65,93 +77,65 @@ class MaintenanceWindow(BaseMainWindow):
                     GROUP BY instrument_id, maintenance_type_id
                 )
                 SELECT 
-                    i.name as instrument_name,
-                    mt.name as maintenance_type,
+                    i.id,
+                    i.name,           -- Instrument
+                    i.brand,          -- Brand
+                    i.model,          -- Model
+                    i.serial_number,  -- Serial Number
+                    i.location,       -- Location
+                    mt.name as maintenance_type,  -- Maintenance Type
+                    u.username as performed_by,   -- Performed By
+                    mr.maintenance_date as last_maintenance,  -- Last Maintenance
                     CASE 
-                        WHEN i.maintenance_1 = mt.id THEN i.period_1
-                        WHEN i.maintenance_2 = mt.id THEN i.period_2
-                        WHEN i.maintenance_3 = mt.id THEN i.period_3
-                    END as period_days,
-                    COALESCE(
-                        (SELECT MAX(maintenance_date)
-                         FROM maintenance_records mr
-                         WHERE mr.instrument_id = i.id
-                         AND mr.maintenance_type_id = mt.id),
-                        'Never'
-                    ) as last_maintenance,
-                    CASE
-                        WHEN COALESCE(
-                            (SELECT MAX(maintenance_date)
-                             FROM maintenance_records mr
-                             WHERE mr.instrument_id = i.id
-                             AND mr.maintenance_type_id = mt.id),
-                            '2000-01-01'
-                        ) = 'Never' THEN
-                            DATE('now')
-                        ELSE
-                            DATE(
-                                (SELECT MAX(maintenance_date)
-                                 FROM maintenance_records mr
-                                 WHERE mr.instrument_id = i.id
-                                 AND mr.maintenance_type_id = mt.id),
-                                '+' || (CASE 
-                                    WHEN i.maintenance_1 = mt.id THEN i.period_1
-                                    WHEN i.maintenance_2 = mt.id THEN i.period_2
-                                    WHEN i.maintenance_3 = mt.id THEN i.period_3
-                                END * 7) || ' days'
-                            )
-                    END as next_maintenance,
-                    u.username as responsible_user,
-                    i.id as instrument_id,
-                    mt.id as maintenance_type_id
+                        WHEN i.maintenance_1 IS NOT NULL AND i.period_1 IS NOT NULL THEN
+                            CASE 
+                                WHEN md1.last_date IS NULL THEN
+                                    date(i.date_start_operating)
+                                ELSE
+                                    date(md1.last_date, '+' || (i.period_1 * 7) || ' days')
+                            END
+                        ELSE NULL
+                    END as next_maintenance,  -- Next Maintenance
+                    mr.notes  -- Notes
                 FROM instruments i
-                JOIN maintenance_types mt ON (
-                    mt.id = i.maintenance_1 OR
-                    mt.id = i.maintenance_2 OR
-                    mt.id = i.maintenance_3
-                )
-                LEFT JOIN users u ON i.responsible_user_id = u.id
-                ORDER BY i.name, mt.name
+                LEFT JOIN maintenance_records mr ON i.id = mr.instrument_id
+                LEFT JOIN maintenance_types mt ON mr.maintenance_type_id = mt.id
+                LEFT JOIN users u ON mr.performed_by = u.id
+                LEFT JOIN maintenance_dates md1 ON i.id = md1.instrument_id AND i.maintenance_1 = md1.maintenance_type_id
+                ORDER BY i.name
             """)
             
-            records = cursor.fetchall()
             self.table.clear_table()
             
-            for record in records:
-                # Calculate status
-                next_maintenance = record['next_maintenance']
-                status, color = get_maintenance_status(next_maintenance)
-                
-                # Create row data
-                row_data = [
-                    record['instrument_name'],
-                    record['maintenance_type'],
-                    format_date_for_display(record['last_maintenance']),
-                    format_date_for_display(next_maintenance),
-                    status,
-                    record['responsible_user'] or 'Not assigned'
-                ]
-                
-                # Add row to table
-                self.table.add_row(row_data, (record['instrument_id'], record['maintenance_type_id']))
-                
-                # Highlight row if needed
-                if color:
-                    self.table.highlight_row(self.table.rowCount() - 1, color)
+            # Store rows that need highlighting
+            rows_to_highlight = []
             
-            # Resize columns to content
-            self.table.resize_columns_to_content()
+            for record in cursor.fetchall():
+                # Get maintenance status using our utility function
+                status, color = get_maintenance_status(record['next_maintenance'])
+                
+                # Add row using BaseTable's add_row method with row_id
+                current_row = self.table.rowCount()
+                self.table.add_row([
+                    record['name'],  # Instrument
+                    record['brand'],  # Brand
+                    record['model'],  # Model
+                    record['serial_number'],  # Serial Number
+                    record['location'],  # Location
+                    record['maintenance_type'] or 'Not Specified',  # Maintenance Type
+                    record['performed_by'] or 'Not Assigned',  # Performed By
+                    format_date_for_display(record['last_maintenance']) if record['last_maintenance'] else 'Not Performed',  # Last Maintenance
+                    format_date_for_display(record['next_maintenance']) if record['next_maintenance'] else 'Not Scheduled',  # Next Maintenance
+                    record['notes'] or ''  # Notes
+                ], record['id'])  # Pass the instrument ID as row_id
+                
+                # Store row for highlighting if needed
+                if color:
+                    rows_to_highlight.append((current_row, color))
+            
+            # Apply highlighting after all rows are added
+            for row, color in rows_to_highlight:
+                self.table.highlight_row(row, color)
             
         except Exception as e:
-            self.show_error('Error', f'Failed to load maintenance records: {str(e)}')
-
-    def show_maintenance_details(self, row):
-        maintenance_type_id = self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        # Instead of showing a dialog, we'll just show a message for now
-        QMessageBox.information(self, 'Maintenance Type Details', 
-                              'This feature is not implemented yet.')
-
-    def add_maintenance(self):
-        dialog = AddMaintenanceDialog(self.user_id, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.load_data() 
+            QMessageBox.warning(self, 'Error', f'Failed to load maintenance data: {str(e)}') 

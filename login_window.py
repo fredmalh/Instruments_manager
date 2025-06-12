@@ -87,6 +87,7 @@ class LoginWindow(QWidget):
 
         # Login button
         login_button = QPushButton('Login')
+        login_button.setFixedWidth(150)
         login_button.clicked.connect(self.try_login)
         layout.addWidget(login_button, alignment=Qt.AlignmentFlag.AlignCenter)
 

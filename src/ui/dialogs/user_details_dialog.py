@@ -1,13 +1,15 @@
 from PyQt6.QtWidgets import (QFormLayout, QLineEdit, QComboBox, 
-                             QDialog, QPushButton)
+                             QDialog, QPushButton, QVBoxLayout, QHBoxLayout, QLabel)
 from ..base.base_dialog import BaseDialog
 import hashlib
+from database import Database
 
 class UserDetailsDialog(BaseDialog):
     def __init__(self, user_id, current_user_id, is_admin, parent=None):
         self.user_id = user_id
         self.current_user_id = current_user_id
         self.is_admin = is_admin
+        self.db = Database()  # Initialize database connection
         super().__init__(parent)
         self.setWindowTitle('User Details')
         self.setMinimumWidth(400)
@@ -15,6 +17,10 @@ class UserDetailsDialog(BaseDialog):
         self.load_user_data()
 
     def init_ui(self):
+        # Create main layout with better spacing
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(15)
+
         # Create form layout
         form_layout = QFormLayout()
         form_layout.setSpacing(10)
@@ -29,15 +35,14 @@ class UserDetailsDialog(BaseDialog):
         self.role_input = QComboBox()
         self.role_input.addItems(['User', 'Admin'])
 
-        # Add fields to form
+        # Add fields to form with better organization
         form_layout.addRow('Username:', self.username_input)
         form_layout.addRow('Email:', self.email_input)
         form_layout.addRow('Password:', self.password_input)
         form_layout.addRow('Confirm Password:', self.confirm_password_input)
         form_layout.addRow('Role:', self.role_input)
 
-        # Create main layout
-        main_layout = self.layout()
+        # Add form layout to main layout
         main_layout.addLayout(form_layout)
 
         # Create button layout
@@ -70,9 +75,10 @@ class UserDetailsDialog(BaseDialog):
                 self.email_input.setText(user['email'])
                 self.role_input.setCurrentText(user['role'])
                 
-                # Clear password fields
+                # Clear password fields and set placeholder
                 self.password_input.clear()
                 self.confirm_password_input.clear()
+                self.password_input.setPlaceholderText('Leave blank to keep current password')
                 
         except Exception as e:
             self.show_error('Error', f'Failed to load user data: {str(e)}')

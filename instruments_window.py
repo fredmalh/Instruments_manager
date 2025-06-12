@@ -424,7 +424,8 @@ class InstrumentsWindow(QWidget):
         self.table.setHorizontalHeaderLabels([
             'ID', 'Name', 'Model', 'Serial Number', 'Location', 'Status', 'Brand', 'Responsible User', 'Next Maintenance'
         ])
-        self.table.doubleClicked.connect(self.show_instrument_details)
+        # Remove double-click connection
+        # self.table.doubleClicked.connect(self.show_instrument_details)
         
         # Configure table for better scrolling and auto-resize
         self.table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
@@ -453,13 +454,6 @@ class InstrumentsWindow(QWidget):
         back_button.setFixedWidth(200)
         button_layout.addWidget(back_button)
 
-        # Add buttons to layout with proper spacing
-        button_layout.addStretch()
-        if self.is_admin:
-            button_layout.addWidget(self.add_button)
-        button_layout.addWidget(back_button)
-        button_layout.addStretch()
-        
         layout.addLayout(button_layout)
 
     def load_instruments(self):
@@ -474,126 +468,73 @@ class InstrumentsWindow(QWidget):
                     FROM maintenance_records
                     GROUP BY instrument_id, maintenance_type_id
                 )
-                SELECT i.*, u.username as responsible_username,
-                       mt1.name as maintenance_type_1,
-                       mt2.name as maintenance_type_2,
-                       mt3.name as maintenance_type_3,
-                       CASE 
-                           WHEN md1.last_date IS NULL THEN 'Never'
-                           ELSE date(md1.last_date)
-                       END as last_maintenance_1,
-                       CASE 
-                           WHEN md2.last_date IS NULL THEN 'Never'
-                           ELSE date(md2.last_date)
-                       END as last_maintenance_2,
-                       CASE 
-                           WHEN md3.last_date IS NULL THEN 'Never'
-                           ELSE date(md3.last_date)
-                       END as last_maintenance_3,
-                       CASE 
-                           WHEN i.maintenance_1 IS NOT NULL AND i.period_1 IS NOT NULL THEN
-                               CASE 
-                                   WHEN md1.last_date IS NULL THEN
-                                       date(i.date_start_operating)
-                                   ELSE
-                                       date(md1.last_date, '+' || (i.period_1 * 7) || ' days')
-                               END
-                           ELSE NULL
-                       END as next_maintenance_1,
-                       CASE 
-                           WHEN i.maintenance_2 IS NOT NULL AND i.period_2 IS NOT NULL THEN
-                               CASE 
-                                   WHEN md2.last_date IS NULL THEN
-                                       date(i.date_start_operating)
-                                   ELSE
-                                       date(md2.last_date, '+' || (i.period_2 * 7) || ' days')
-                               END
-                           ELSE NULL
-                       END as next_maintenance_2,
-                       CASE 
-                           WHEN i.maintenance_3 IS NOT NULL AND i.period_3 IS NOT NULL THEN
-                               CASE 
-                                   WHEN md3.last_date IS NULL THEN
-                                       date(i.date_start_operating)
-                                   ELSE
-                                       date(md3.last_date, '+' || (i.period_3 * 7) || ' days')
-                               END
-                           ELSE NULL
-                       END as next_maintenance_3
+                SELECT 
+                    i.id, i.name, i.model, i.serial_number, i.location, 
+                    i.status, i.brand, u.username as responsible_user,
+                    CASE 
+                        WHEN i.maintenance_1 IS NOT NULL AND i.period_1 IS NOT NULL THEN
+                            CASE 
+                                WHEN md1.last_date IS NULL THEN
+                                    date(i.date_start_operating)
+                                ELSE
+                                    date(md1.last_date, '+' || (i.period_1 * 7) || ' days')
+                            END
+                        ELSE NULL
+                    END as next_maintenance
                 FROM instruments i
                 LEFT JOIN users u ON i.responsible_user_id = u.id
-                LEFT JOIN maintenance_types mt1 ON i.maintenance_1 = mt1.id
-                LEFT JOIN maintenance_types mt2 ON i.maintenance_2 = mt2.id
-                LEFT JOIN maintenance_types mt3 ON i.maintenance_3 = mt3.id
                 LEFT JOIN maintenance_dates md1 ON i.id = md1.instrument_id AND i.maintenance_1 = md1.maintenance_type_id
-                LEFT JOIN maintenance_dates md2 ON i.id = md2.instrument_id AND i.maintenance_2 = md2.maintenance_type_id
-                LEFT JOIN maintenance_dates md3 ON i.id = md3.instrument_id AND i.maintenance_3 = md3.maintenance_type_id
                 ORDER BY i.name
             """)
             
             instruments = cursor.fetchall()
-
             self.table.setRowCount(len(instruments))
-            for i, instrument in enumerate(instruments):
-                # Calculate the earliest next maintenance date
-                next_maintenance_dates = [
-                    instrument['next_maintenance_1'],
-                    instrument['next_maintenance_2'],
-                    instrument['next_maintenance_3']
-                ]
-                next_maintenance_dates = [d for d in next_maintenance_dates if d is not None]
-                next_maintenance = min(next_maintenance_dates) if next_maintenance_dates else None
 
-                # Format dates for display
-                last_maintenance_1_display = format_date_for_display(instrument['last_maintenance_1']) if instrument['last_maintenance_1'] != 'Never' else 'Never'
-                last_maintenance_2_display = format_date_for_display(instrument['last_maintenance_2']) if instrument['last_maintenance_2'] != 'Never' else 'Never'
-                last_maintenance_3_display = format_date_for_display(instrument['last_maintenance_3']) if instrument['last_maintenance_3'] != 'Never' else 'Never'
-                next_maintenance_display = format_date_for_display(next_maintenance) if next_maintenance else 'Not scheduled'
-
-                # Add data to table - setting each item individually to ensure proper formatting
-                self.table.setItem(i, 0, QTableWidgetItem(str(instrument['name'])))
-                self.table.setItem(i, 1, QTableWidgetItem(str(instrument['model'])))
-                self.table.setItem(i, 2, QTableWidgetItem(str(instrument['serial_number'])))
-                self.table.setItem(i, 3, QTableWidgetItem(str(instrument['location'])))
-                self.table.setItem(i, 4, QTableWidgetItem(str(instrument['brand'])))
-                self.table.setItem(i, 5, QTableWidgetItem(str(instrument['status'])))
-                self.table.setItem(i, 6, QTableWidgetItem(str(instrument['responsible_username'] or 'Not assigned')))
-                self.table.setItem(i, 7, QTableWidgetItem(last_maintenance_1_display))
-                self.table.setItem(i, 8, QTableWidgetItem(last_maintenance_2_display))
-                self.table.setItem(i, 9, QTableWidgetItem(last_maintenance_3_display))
-                self.table.setItem(i, 10, QTableWidgetItem(next_maintenance_display))
-                self.table.setItem(i, 11, QTableWidgetItem(str(instrument['maintenance_type_1'] or '')))
-                self.table.setItem(i, 12, QTableWidgetItem(str(instrument['period_1']) if instrument['period_1'] else ''))
-                self.table.setItem(i, 13, QTableWidgetItem(str(instrument['maintenance_type_2'] or '')))
-                self.table.setItem(i, 14, QTableWidgetItem(str(instrument['period_2']) if instrument['period_2'] else ''))
-                self.table.setItem(i, 15, QTableWidgetItem(str(instrument['maintenance_type_3'] or '')))
-                self.table.setItem(i, 16, QTableWidgetItem(str(instrument['period_3']) if instrument['period_3'] else ''))
-
-                # Set alignment for all items
-                for col in range(self.table.columnCount()):
-                    self.table.item(i, col).setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            for row, instrument in enumerate(instruments):
+                # Create clickable name label
+                name_label = QLabel(instrument['name'])
+                name_label.setStyleSheet("""
+                    QLabel {
+                        color: #0d47a1;
+                        text-decoration: underline;
+                    }
+                    QLabel:hover {
+                        color: #1565c0;
+                        cursor: pointer;
+                    }
+                """)
+                name_label.mousePressEvent = lambda e, iid=instrument['id']: self.show_instrument_details(iid)
                 
-                # Set row color based on maintenance status
-                if next_maintenance and next_maintenance < datetime.now():
-                    for col in range(self.table.columnCount()):
-                        self.table.item(i, col).setBackground(QColor('red'))
-
-                # Store instrument_id in the first column for later use
-                self.table.item(i, 0).setData(Qt.ItemDataRole.UserRole, instrument['id'])
+                # Add name label to second column (after ID)
+                self.table.setCellWidget(row, 1, name_label)
+                
+                # Add other columns
+                for col, value in enumerate([
+                    instrument['id'],
+                    instrument['model'],
+                    instrument['serial_number'],
+                    instrument['location'],
+                    instrument['status'],
+                    instrument['brand'],
+                    instrument['responsible_user'] or 'Not Assigned',
+                    format_date_for_display(instrument['next_maintenance']) if instrument['next_maintenance'] else 'Not Scheduled'
+                ], 0):
+                    if col == 1:  # Skip name column as it's already set
+                        continue
+                    item = QTableWidgetItem(str(value))
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    self.table.setItem(row, col, item)
 
             # Resize columns to content
             self.table.resizeColumnsToContents()
-
+            
         except Exception as e:
-            QMessageBox.critical(self, 'Error', f'Failed to load instruments: {str(e)}')
+            QMessageBox.warning(self, 'Error', f'Failed to load instruments: {str(e)}')
 
-    def show_instrument_details(self):
-        selected_row = self.table.currentRow()
-        if selected_row >= 0:
-            instrument_id = int(self.table.item(selected_row, 0).text())
-            dialog = InstrumentDetailsDialog(instrument_id, self.user_id, self.is_admin, self)
-            dialog.show()  # Changed from exec() to show()
-            # Note: We don't need to check the result since it's a non-modal window
+    def show_instrument_details(self, instrument_id):
+        dialog = InstrumentDetailsDialog(instrument_id, self.user_id, self.is_admin, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.load_instruments()
 
     def add_instrument(self):
         # TODO: Implement add functionality

@@ -1,25 +1,21 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
-from PyQt6.QtCore import pyqtSignal
-from ..base.base_main_window import BaseMainWindow
+from PyQt6.QtWidgets import QMessageBox
+from PyQt6.QtCore import Qt
+from ..base.base_data_window import BaseDataWindow
 from ..base.base_table import BaseTable
 from database import Database
-from datetime import datetime
+from ..dialogs.user_details_dialog import UserDetailsDialog
+from ..dialogs.add_user_dialog import AddUserDialog
 
-class UsersWindow(BaseMainWindow):
-    back_signal = pyqtSignal()
-
+class UsersWindow(BaseDataWindow):
     def init_ui(self):
         super().init_ui()
 
         # Create title
-        self.create_title('User Management')
+        self.create_title('Users Management')
 
         # Create table
         self.table = BaseTable()
-        self.table.set_headers([
-            'ID', 'Username', 'Email', 'Role', 'Last Login'
-        ])
-        self.table.row_double_clicked.connect(self.show_user_details)
+        self.table.set_headers(['Username', 'Email', 'Role'])
         self.main_layout.addWidget(self.table)
 
         # Create buttons using standardized layout
@@ -32,7 +28,7 @@ class UsersWindow(BaseMainWindow):
             },
             {
                 'text': 'Refresh',
-                'callback': self.load_users,
+                'callback': self.load_data,
                 'position': 'center'
             },
             {
@@ -43,59 +39,45 @@ class UsersWindow(BaseMainWindow):
         ]
         self.main_layout.addLayout(self.create_button_layout(buttons_config))
 
-        # Load initial data
-        self.load_users()
+    def handle_cell_click(self, row, column):
+        """Handle cell click events"""
+        if column == 0:  # Only handle clicks on the Username column
+            user_id = self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+            if user_id:
+                dialog = UserDetailsDialog(user_id, self.user_id, self.is_admin, self)
+                dialog.exec()
 
-    def load_users(self):
+    def load_data(self):
+        """Load users data"""
         try:
             cursor = self.db.conn.cursor()
             cursor.execute("""
-                SELECT id, username, email, role, last_login
+                SELECT 
+                    id,
+                    username,
+                    email,
+                    CASE 
+                        WHEN is_admin = 1 THEN 'Administrator'
+                        ELSE 'User'
+                    END as role
                 FROM users
                 ORDER BY username
             """)
             
-            users = cursor.fetchall()
             self.table.clear_table()
-
-            for user in users:
-                # Format data for display
-                row_data = [
-                    user['id'],
-                    user['username'],
-                    user['email'],
-                    user['role'],
-                    user['last_login'] or 'Never'
-                ]
-                
-                # Add row to table
-                self.table.add_row(row_data, user['id'])
-
-            # Resize columns to content
-            self.table.resize_columns_to_content()
+            
+            for user in cursor.fetchall():
+                # Add row using BaseTable's add_row method with row_id
+                self.table.add_row([
+                    user['username'],  # Username
+                    user['email'],     # Email
+                    user['role']       # Role
+                ], user['id'])  # Pass the user ID as row_id
             
         except Exception as e:
-            self.show_error('Error', f'Failed to load users: {str(e)}')
-
-    def show_user_details(self, row):
-        user_id = self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        dialog = UserDetailsDialog(user_id, self.user_id, self.is_admin, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.load_users()
+            QMessageBox.warning(self, 'Error', f'Failed to load users: {str(e)}')
 
     def add_user(self):
         dialog = AddUserDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.load_users()
-
-    def update_user(self, user_id, is_admin):
-        """Update the user information when returning to this view"""
-        self.user_id = user_id
-        self.is_admin = is_admin
-        
-        # Update buttons visibility
-        if hasattr(self, 'add_button'):
-            self.add_button.setVisible(self.is_admin)
-        
-        # Reload data
-        self.load_users() 
+            self.load_data() 

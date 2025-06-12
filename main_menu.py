@@ -31,7 +31,7 @@ class MainMenu(QWidget):
                 padding: 10px 20px;
                 border-radius: 5px;
                 font-size: 14px;
-                min-width: 200px;
+                min-width: 150px;
             }
             QPushButton:hover {
                 background-color: #1565c0;

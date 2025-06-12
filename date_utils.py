@@ -27,41 +27,31 @@ def calculate_next_maintenance(last_maintenance_date, period_weeks, start_date=N
 
 def format_date_for_display(date_str):
     """
-    Convert date from 'YYYY-MM-DD' to 'DD-MM-YYYY' for display.
+    Format date for display. Returns the date in YYYY-MM-DD format.
     
     Args:
         date_str (str): Date in 'YYYY-MM-DD' format
         
     Returns:
-        str: Date in 'DD-MM-YYYY' format
+        str: Date in 'YYYY-MM-DD' format
     """
     try:
         if not date_str or date_str == 'Never':
             return 'Never'
             
-        # First try to parse as YYYY-MM-DD
-        try:
-            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-            return date_obj.strftime('%d-%m-%Y')
-        except ValueError:
-            # If that fails, try to parse as DD-MM-YYYY
-            try:
-                date_obj = datetime.strptime(date_str, '%d-%m-%Y')
-                return date_str  # Already in correct format
-            except ValueError:
-                # If both fail, try to parse as any valid date format
-                date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                return date_obj.strftime('%d-%m-%Y')
+        # Parse the date to validate it
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+        return date_str  # Return in YYYY-MM-DD format
     except Exception as e:
         print(f"Error formatting date: {str(e)}")
         return 'Invalid Date'
 
 def format_date_for_db(date_str):
     """
-    Convert date from 'DD-MM-YYYY' to 'YYYY-MM-DD' for database storage.
+    Format date for database storage. Returns the date in YYYY-MM-DD format.
     
     Args:
-        date_str (str): Date in 'DD-MM-YYYY' format
+        date_str (str): Date in 'YYYY-MM-DD' format
         
     Returns:
         str: Date in 'YYYY-MM-DD' format
@@ -69,8 +59,9 @@ def format_date_for_db(date_str):
     try:
         if not date_str or date_str == 'Never':
             return None
-        date_obj = datetime.strptime(date_str, '%d-%m-%Y')
-        return date_obj.strftime('%Y-%m-%d')
+        # Parse the date to validate it
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+        return date_str  # Return in YYYY-MM-DD format
     except Exception as e:
         print(f"Error formatting date for DB: {str(e)}")
         return None
@@ -90,15 +81,17 @@ def get_maintenance_status(next_maintenance_date):
         if not next_maintenance_date:
             return 'on_schedule', None
             
+        # Parse the date
         next_date = datetime.strptime(next_maintenance_date, '%Y-%m-%d')
+        
         days_until_next = (next_date - datetime.now()).days
         
         if days_until_next < 0:
             return 'overdue', 'red'
-        elif days_until_next <= 7:
+        elif days_until_next <= 10:
             return 'due_soon', 'yellow'
         else:
-            return 'on_schedule', 'green'
+            return 'on_schedule', None
     except Exception as e:
         print(f"Error getting maintenance status: {str(e)}")
         return 'on_schedule', None 

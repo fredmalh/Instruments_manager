@@ -14,7 +14,7 @@ from date_utils import (
 )
 from .add_maintenance_dialog import AddMaintenanceDialog
 
-class InstrumentDetailsDialog(QMainWindow):
+class InstrumentDetailsDialog(QDialog):
     def __init__(self, instrument_id, user_id, is_admin, parent=None):
         super().__init__(parent)
         self.instrument_id = instrument_id
@@ -28,7 +28,7 @@ class InstrumentDetailsDialog(QMainWindow):
 
     def apply_dark_theme(self):
         self.setStyleSheet("""
-            QMainWindow {
+            QDialog {
                 background-color: #1e1e1e;
             }
             QWidget {
@@ -92,10 +92,8 @@ class InstrumentDetailsDialog(QMainWindow):
         default_font = QFont('Arial', 10)
         self.setFont(default_font)
         
-        # Create central widget and main layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
+        # Create main layout
+        layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
         # Create horizontal layout for basic info and maintenance config
@@ -126,7 +124,7 @@ class InstrumentDetailsDialog(QMainWindow):
         self.status_input.addItems(['Operational', 'Maintenance', 'Out of Service'])
         self.responsible_user = QComboBox()
         self.date_start_input = QLineEdit()
-        self.date_start_input.setPlaceholderText("DD-MM-YYYY")
+        self.date_start_input.setPlaceholderText("YYYY-MM-DD")
 
         # Load users into responsible_user dropdown
         self.load_users()
@@ -229,37 +227,41 @@ class InstrumentDetailsDialog(QMainWindow):
         layout.addWidget(history_group)
 
         # Buttons
-        buttons_layout = QHBoxLayout()
+        button_layout = QHBoxLayout()
+        
+        # Create edit/save/cancel buttons
         self.edit_button = QPushButton('Edit Data')
         self.save_button = QPushButton('Save Changes')
         self.cancel_button = QPushButton('Cancel')
-        add_maintenance_button = QPushButton('Add Maintenance Record')
-        delete_maintenance_button = QPushButton('Delete Maintenance Record')
-        close_button = QPushButton('Close')
-
-        # Set font for all buttons
-        button_font = QFont('Arial', 10, QFont.Weight.Medium)
-        for button in [self.edit_button, self.save_button, self.cancel_button, 
-                      add_maintenance_button, delete_maintenance_button, close_button]:
-            button.setFont(button_font)
-
-        # Only show add/delete maintenance buttons if user is admin or responsible for the instrument
-        if self.is_admin or self.is_responsible_user():
-            add_maintenance_button.clicked.connect(self.add_maintenance)
-            delete_maintenance_button.clicked.connect(self.delete_maintenance)
-            buttons_layout.addWidget(add_maintenance_button)
-            buttons_layout.addWidget(delete_maintenance_button)
-
+        
+        # Set fixed width for buttons
+        button_width = 200
+        self.edit_button.setFixedWidth(button_width)
+        self.save_button.setFixedWidth(button_width)
+        self.cancel_button.setFixedWidth(button_width)
+        
+        # Connect button signals
         self.edit_button.clicked.connect(lambda: self.set_edit_mode(True))
         self.save_button.clicked.connect(self.save_changes)
         self.cancel_button.clicked.connect(lambda: self.set_edit_mode(False))
-        close_button.clicked.connect(self.close)
+        
+        if self.is_admin:
+            add_maintenance_button = QPushButton('Add Maintenance Record')
+            add_maintenance_button.setFixedWidth(button_width)
+            add_maintenance_button.clicked.connect(self.add_maintenance)
+            button_layout.addWidget(add_maintenance_button)
 
-        buttons_layout.addWidget(self.edit_button)
-        buttons_layout.addWidget(self.save_button)
-        buttons_layout.addWidget(self.cancel_button)
-        buttons_layout.addWidget(close_button)
-        layout.addLayout(buttons_layout)
+        close_button = QPushButton('Close')
+        close_button.setFixedWidth(button_width)
+        close_button.clicked.connect(self.accept)
+        button_layout.addWidget(close_button)
+
+        # Add edit/save/cancel buttons
+        button_layout.addWidget(self.edit_button)
+        button_layout.addWidget(self.save_button)
+        button_layout.addWidget(self.cancel_button)
+
+        layout.addLayout(button_layout)
 
     def set_edit_mode(self, edit_mode):
         # Enable/disable editing of fields
@@ -318,11 +320,10 @@ class InstrumentDetailsDialog(QMainWindow):
 
             # Validate date format
             try:
-                # Convert DD-MM-YYYY to YYYY-MM-DD for SQLite
-                day, month, year = date_start.split('-')
-                date_start = f"{year}-{month}-{day}"
+                # Validate date is in YYYY-MM-DD format
+                datetime.strptime(date_start, '%Y-%m-%d')
             except ValueError:
-                QMessageBox.warning(self, 'Error', 'Please enter date in DD-MM-YYYY format')
+                QMessageBox.warning(self, 'Error', 'Please enter date in YYYY-MM-DD format')
                 return
 
             # Validate maintenance periods
@@ -392,10 +393,9 @@ class InstrumentDetailsDialog(QMainWindow):
                 # Format and set the date start operating
                 if instrument['date_start_operating']:
                     try:
-                        # Convert YYYY-MM-DD to DD-MM-YYYY for display
-                        year, month, day = instrument['date_start_operating'].split('-')
-                        formatted_date = f"{day}-{month}-{year}"
-                        self.date_start_input.setText(formatted_date)
+                        # Validate date is in YYYY-MM-DD format
+                        datetime.strptime(instrument['date_start_operating'], '%Y-%m-%d')
+                        self.date_start_input.setText(instrument['date_start_operating'])
                     except:
                         self.date_start_input.setText(instrument['date_start_operating'])
                 else:

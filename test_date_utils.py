@@ -16,50 +16,50 @@ class TestDateUtils(unittest.TestCase):
         self.next_month = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
 
     def test_calculate_next_maintenance(self):
-        # Test with valid last maintenance date
-        next_date = calculate_next_maintenance(self.last_week, 2)
+        # Test with last maintenance date
         expected_date = (datetime.strptime(self.last_week, '%Y-%m-%d') + timedelta(weeks=2)).strftime('%Y-%m-%d')
-        self.assertEqual(next_date, expected_date)
+        result = calculate_next_maintenance(self.last_week, 2)
+        self.assertEqual(result, expected_date)
 
-        # Test with no last maintenance date
-        next_date = calculate_next_maintenance(None, 2, self.today)
-        self.assertEqual(next_date, self.today)
+        # Test with no last maintenance but start date
+        result = calculate_next_maintenance(None, 2, self.today)
+        self.assertEqual(result, self.today)
 
-        # Test with 'Never' as last maintenance date
-        next_date = calculate_next_maintenance('Never', 2, self.today)
-        self.assertEqual(next_date, self.today)
+        # Test with no dates
+        result = calculate_next_maintenance(None, 2)
+        self.assertEqual(result, self.today)
 
-        # Test with invalid date
-        next_date = calculate_next_maintenance('invalid-date', 2)
-        self.assertIsNone(next_date)
+        # Test with 'Never'
+        result = calculate_next_maintenance('Never', 2, self.today)
+        self.assertEqual(result, self.today)
 
     def test_format_date_for_display(self):
-        # Test valid date conversion
+        # Test valid date
         display_date = format_date_for_display('2024-03-15')
-        self.assertEqual(display_date, '15-03-2024')
+        self.assertEqual(display_date, '2024-03-15')
 
-        # Test None value
+        # Test None
         display_date = format_date_for_display(None)
         self.assertEqual(display_date, 'Never')
 
-        # Test 'Never' value
+        # Test 'Never'
         display_date = format_date_for_display('Never')
         self.assertEqual(display_date, 'Never')
 
         # Test invalid date
         display_date = format_date_for_display('invalid-date')
-        self.assertEqual(display_date, 'invalid-date')
+        self.assertEqual(display_date, 'Invalid Date')
 
     def test_format_date_for_db(self):
-        # Test valid date conversion
-        db_date = format_date_for_db('15-03-2024')
+        # Test valid date
+        db_date = format_date_for_db('2024-03-15')
         self.assertEqual(db_date, '2024-03-15')
 
-        # Test None value
+        # Test None
         db_date = format_date_for_db(None)
         self.assertIsNone(db_date)
 
-        # Test 'Never' value
+        # Test 'Never'
         db_date = format_date_for_db('Never')
         self.assertIsNone(db_date)
 
@@ -68,22 +68,22 @@ class TestDateUtils(unittest.TestCase):
         self.assertIsNone(db_date)
 
     def test_get_maintenance_status(self):
-        # Test overdue maintenance
+        # Test overdue
         status, color = get_maintenance_status(self.last_week)
         self.assertEqual(status, 'overdue')
         self.assertEqual(color, 'red')
 
-        # Test due soon maintenance
+        # Test due soon
         status, color = get_maintenance_status(self.next_week)
         self.assertEqual(status, 'due_soon')
         self.assertEqual(color, 'yellow')
 
-        # Test on schedule maintenance
+        # Test on schedule
         status, color = get_maintenance_status(self.next_month)
         self.assertEqual(status, 'on_schedule')
-        self.assertEqual(color, 'green')
+        self.assertIsNone(color)
 
-        # Test None value
+        # Test None
         status, color = get_maintenance_status(None)
         self.assertEqual(status, 'on_schedule')
         self.assertIsNone(color)

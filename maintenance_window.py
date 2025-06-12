@@ -114,14 +114,13 @@ class MaintenanceWindow(QMainWindow):
         bottom_layout = QHBoxLayout()
         bottom_layout.setSpacing(10)
         
-        # Create buttons with fixed width
         refresh_button = QPushButton('Refresh')
         refresh_button.clicked.connect(self.load_maintenance_data)
-        refresh_button.setFixedWidth(200)
+        refresh_button.setFixedWidth(150)  # Set fixed width
 
         back_button = QPushButton('Back to Main Menu')
         back_button.clicked.connect(self.back_signal.emit)
-        back_button.setFixedWidth(200)
+        back_button.setFixedWidth(150)  # Set fixed width
 
         # Add buttons to layout with proper spacing
         bottom_layout.addStretch()
@@ -141,10 +140,8 @@ class MaintenanceWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # Update button widths when window is resized
-        button_width = self.width() // 4
-        for button in self.findChildren(QPushButton):
-            button.setFixedWidth(button_width)
+        # Remove dynamic width adjustment since we're using fixed width
+        pass
 
     def load_maintenance_data(self):
         try:

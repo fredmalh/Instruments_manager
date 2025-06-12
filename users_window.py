@@ -45,6 +45,11 @@ class UserDialog(QDialog):
         save_button = QPushButton('Save')
         cancel_button = QPushButton('Cancel')
 
+        # Set fixed width for buttons
+        button_width = 150
+        save_button.setFixedWidth(button_width)
+        cancel_button.setFixedWidth(button_width)
+
         save_button.clicked.connect(self.save_user)
         cancel_button.clicked.connect(self.reject)
 
@@ -186,7 +191,6 @@ class UsersWindow(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(['Username', 'Full Name', 'Email', 'Role'])
-        self.table.doubleClicked.connect(self.edit_user)
         
         # Configure table for better scrolling and auto-resize
         self.table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
@@ -206,15 +210,15 @@ class UsersWindow(QWidget):
         if self.is_admin:
             self.add_button = QPushButton('Add User')
             self.add_button.clicked.connect(self.add_user)
-            self.add_button.setFixedWidth(200)  # Initial fixed width
+            self.add_button.setFixedWidth(150)  # Set fixed width
 
         refresh_button = QPushButton('Refresh')
         refresh_button.clicked.connect(self.load_users)
-        refresh_button.setFixedWidth(200)  # Initial fixed width
+        refresh_button.setFixedWidth(150)  # Set fixed width
 
         back_button = QPushButton('Back to Main Menu')
         back_button.clicked.connect(self.back_signal.emit)
-        back_button.setFixedWidth(200)  # Initial fixed width
+        back_button.setFixedWidth(150)  # Set fixed width
 
         # Add buttons to layout with proper spacing
         bottom_layout.addStretch()
@@ -228,10 +232,8 @@ class UsersWindow(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # Update button widths when window is resized
-        button_width = self.width() // 4
-        for button in self.findChildren(QPushButton):
-            button.setFixedWidth(button_width)
+        # Remove dynamic width adjustment since we're using fixed width
+        pass
 
     def load_users(self):
         cursor = self.db.conn.cursor()
@@ -240,7 +242,25 @@ class UsersWindow(QWidget):
 
         self.table.setRowCount(len(users))
         for row, user in enumerate(users):
-            for col, value in enumerate(user):
+            # Create clickable username label
+            username_label = QLabel(user['username'])
+            username_label.setStyleSheet("""
+                QLabel {
+                    color: #0d47a1;
+                    text-decoration: underline;
+                }
+                QLabel:hover {
+                    color: #1565c0;
+                    cursor: pointer;
+                }
+            """)
+            username_label.mousePressEvent = lambda e, uid=user['id']: self.edit_user(uid)
+            
+            # Add username label to first column
+            self.table.setCellWidget(row, 0, username_label)
+            
+            # Add other columns
+            for col, value in enumerate(user[1:], 1):
                 if col == 3:  # Role column (is_admin)
                     item = QTableWidgetItem("Admin" if value else "Normal User")
                 else:
@@ -256,13 +276,10 @@ class UsersWindow(QWidget):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.load_users()  # Reload the table after adding a user
 
-    def edit_user(self):
-        selected_row = self.table.currentRow()
-        if selected_row >= 0:
-            user_id = int(self.table.item(selected_row, 0).text())
-            dialog = UserDialog(user_id, parent=self)
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                self.load_users()
+    def edit_user(self, user_id):
+        dialog = UserDialog(user_id, parent=self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.load_users()
 
     def update_user(self, user_id, is_admin):
         """Update the user information when returning to this view"""

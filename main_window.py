@@ -10,7 +10,7 @@ from datetime import datetime
 from login_window import LoginWindow
 from main_menu import MainMenu
 from instruments_window import InstrumentsWindow
-from maintenance_window import MaintenanceWindow
+from src.ui.windows.maintenance_window import MaintenanceWindow
 from users_window import UsersWindow
 from date_utils import (
     calculate_next_maintenance,
@@ -78,7 +78,7 @@ class AddInstrumentDialog(QDialog):
         self.status_input = QComboBox()
         self.status_input.addItems(['Operational', 'Maintenance', 'Out of Service'])
         self.date_start_input = QLineEdit()
-        self.date_start_input.setPlaceholderText("DD-MM-YYYY")
+        self.date_start_input.setPlaceholderText("YYYY-MM-DD")
 
         # Responsible User
         self.responsible_user = QComboBox()
@@ -150,6 +150,11 @@ class AddInstrumentDialog(QDialog):
         save_button = QPushButton('Save')
         cancel_button = QPushButton('Cancel')
 
+        # Set fixed width for buttons
+        button_width = 150
+        save_button.setFixedWidth(button_width)
+        cancel_button.setFixedWidth(button_width)
+
         save_button.clicked.connect(self.save_instrument)
         cancel_button.clicked.connect(self.reject)
 
@@ -184,11 +189,10 @@ class AddInstrumentDialog(QDialog):
         try:
             # Validate date format
             try:
-                # Convert DD-MM-YYYY to YYYY-MM-DD for SQLite
-                day, month, year = date_start.split('-')
-                date_start = f"{year}-{month}-{day}"
+                # Validate date is in YYYY-MM-DD format
+                datetime.strptime(date_start, '%Y-%m-%d')
             except ValueError:
-                QMessageBox.warning(self, 'Error', 'Please enter date in DD-MM-YYYY format')
+                QMessageBox.warning(self, 'Error', 'Please enter date in YYYY-MM-DD format')
                 return
 
             # Start transaction
@@ -282,6 +286,11 @@ class AddMaintenanceDialog(QDialog):
         save_button = QPushButton('Save')
         cancel_button = QPushButton('Cancel')
 
+        # Set fixed width for buttons
+        button_width = 150
+        save_button.setFixedWidth(button_width)
+        cancel_button.setFixedWidth(button_width)
+
         save_button.clicked.connect(self.save_maintenance)
         cancel_button.clicked.connect(self.reject)
 
@@ -371,23 +380,23 @@ class InstrumentsWindow(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
         layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
 
         # Title
-        title = QLabel('Instrument List')
+        title = QLabel('List of Instruments')
         title.setFont(QFont('Arial', 16, QFont.Weight.Bold))
         layout.addWidget(title)
 
-        # Table
+        # Create table
         self.table = QTableWidget()
-        self.table.setColumnCount(17)  # Updated number of columns
+        self.table.setColumnCount(9)  # Increased column count
         self.table.setHorizontalHeaderLabels([
-            'Name', 'Model', 'Serial Number', 'Location', 'Brand', 'Status', 'Responsible User',
-            'Last Maintenance 1', 'Last Maintenance 2', 'Last Maintenance 3',
-            'Next Maintenance',
-            'Maintenance 1', 'Period 1', 'Maintenance 2', 'Period 2', 'Maintenance 3', 'Period 3'
+            'ID', 'Name', 'Model', 'Serial Number', 'Location', 'Status', 'Brand', 'Responsible User', 'Next Maintenance'
         ])
+        # Remove double-click connection
+        # self.table.itemDoubleClicked.connect(self.show_instrument_details)
+        
         # Configure table for better scrolling and auto-resize
         self.table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
         self.table.setHorizontalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
@@ -396,67 +405,31 @@ class InstrumentsWindow(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(False)  # Changed to False to allow proper resizing
-        self.table.setStyleSheet("""
-            QTableWidget {
-                background-color: #2d2d2d;
-                color: #ffffff;
-                gridline-color: #3d3d3d;
-                border: 1px solid #3d3d3d;
-            }
-            QTableWidget::item {
-                padding: 5px;
-                margin: 0px;
-                border: none;
-            }
-            QTableWidget::item:selected {
-                background-color: #0d47a1;
-            }
-            QTableWidget::item:alternate {
-                background-color: #252525;
-            }
-            QHeaderView::section {
-                background-color: #2d2d2d;
-                color: #ffffff;
-                padding: 5px;
-                border: 1px solid #3d3d3d;
-            }
-        """)
-        self.table.itemDoubleClicked.connect(self.show_instrument_details)
-        layout.addWidget(self.table)
-
-        # Bottom buttons
-        bottom_layout = QHBoxLayout()
-        bottom_layout.setSpacing(10)
         
-        # Create buttons with fixed width
-        add_button = QPushButton('Add Instrument')
-        refresh_button = QPushButton('Refresh')
+        # Add table to layout with stretch factor to make it expand
+        layout.addWidget(self.table, 1)
+
+        # Create buttons
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+        
+        if self.is_admin:
+            self.add_button = QPushButton('Add Instrument')
+            self.add_button.clicked.connect(self.show_add_instrument)
+            self.add_button.setFixedWidth(200)
+            button_layout.addWidget(self.add_button)
+
         back_button = QPushButton('Back to Main Menu')
-
-        # Set fixed width for buttons (1/4 of parent width)
-        button_width = self.width() // 4
-        add_button.setFixedWidth(button_width)
-        refresh_button.setFixedWidth(button_width)
-        back_button.setFixedWidth(button_width)
-
-        add_button.clicked.connect(self.show_add_instrument)
-        refresh_button.clicked.connect(self.load_instruments)
         back_button.clicked.connect(self.back_signal.emit)
+        back_button.setFixedWidth(200)
+        button_layout.addWidget(back_button)
 
-        bottom_layout.addStretch()
-        bottom_layout.addWidget(add_button)
-        bottom_layout.addWidget(refresh_button)
-        bottom_layout.addWidget(back_button)
-        bottom_layout.addStretch()
-        
-        layout.addLayout(bottom_layout)
+        layout.addLayout(button_layout)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # Update button widths when window is resized
-        button_width = self.width() // 4
-        for button in self.findChildren(QPushButton):
-            button.setFixedWidth(button_width)
+        # Remove the dynamic width adjustment since we're using fixed width
+        pass
 
     def load_instruments(self):
         try:
@@ -470,89 +443,66 @@ class InstrumentsWindow(QWidget):
                     FROM maintenance_records
                     GROUP BY instrument_id, maintenance_type_id
                 )
-                SELECT i.*, u.username as responsible_username,
-                       mt1.name as maintenance_type_1,
-                       mt2.name as maintenance_type_2,
-                       mt3.name as maintenance_type_3,
-                       md1.last_date as last_maintenance_1,
-                       md2.last_date as last_maintenance_2,
-                       md3.last_date as last_maintenance_3,
-                       CASE 
-                           WHEN i.maintenance_1 IS NOT NULL AND i.period_1 IS NOT NULL THEN
-                               CASE 
-                                   WHEN md1.last_date IS NULL THEN
-                                       date(i.date_start_operating)
-                                   ELSE
-                                       date(md1.last_date, '+' || (i.period_1 * 7) || ' days')
-                               END
-                           ELSE NULL
-                       END as next_maintenance_1,
-                       CASE 
-                           WHEN i.maintenance_2 IS NOT NULL AND i.period_2 IS NOT NULL THEN
-                               CASE 
-                                   WHEN md2.last_date IS NULL THEN
-                                       date(i.date_start_operating)
-                                   ELSE
-                                       date(md2.last_date, '+' || (i.period_2 * 7) || ' days')
-                               END
-                           ELSE NULL
-                       END as next_maintenance_2,
-                       CASE 
-                           WHEN i.maintenance_3 IS NOT NULL AND i.period_3 IS NOT NULL THEN
-                               CASE 
-                                   WHEN md3.last_date IS NULL THEN
-                                       date(i.date_start_operating)
-                                   ELSE
-                                       date(md3.last_date, '+' || (i.period_3 * 7) || ' days')
-                               END
-                           ELSE NULL
-                       END as next_maintenance_3
+                SELECT 
+                    i.id, i.name, i.model, i.serial_number, i.location, 
+                    i.status, i.brand, u.username as responsible_user,
+                    CASE 
+                        WHEN i.maintenance_1 IS NOT NULL AND i.period_1 IS NOT NULL THEN
+                            CASE 
+                                WHEN md1.last_date IS NULL THEN
+                                    date(i.date_start_operating)
+                                ELSE
+                                    date(md1.last_date, '+' || (i.period_1 * 7) || ' days')
+                            END
+                        ELSE NULL
+                    END as next_maintenance
                 FROM instruments i
                 LEFT JOIN users u ON i.responsible_user_id = u.id
-                LEFT JOIN maintenance_types mt1 ON i.maintenance_1 = mt1.id
-                LEFT JOIN maintenance_types mt2 ON i.maintenance_2 = mt2.id
-                LEFT JOIN maintenance_types mt3 ON i.maintenance_3 = mt3.id
                 LEFT JOIN maintenance_dates md1 ON i.id = md1.instrument_id AND i.maintenance_1 = md1.maintenance_type_id
-                LEFT JOIN maintenance_dates md2 ON i.id = md2.instrument_id AND i.maintenance_2 = md2.maintenance_type_id
-                LEFT JOIN maintenance_dates md3 ON i.id = md3.instrument_id AND i.maintenance_3 = md3.maintenance_type_id
                 ORDER BY i.name
             """)
+            
             instruments = cursor.fetchall()
-
             self.table.setRowCount(len(instruments))
-            for i, instrument in enumerate(instruments):
-                # Calculate the earliest next maintenance date
-                next_maintenance_dates = [
-                    instrument['next_maintenance_1'],
-                    instrument['next_maintenance_2'],
-                    instrument['next_maintenance_3']
-                ]
-                next_maintenance_dates = [d for d in next_maintenance_dates if d is not None]
-                next_maintenance = min(next_maintenance_dates) if next_maintenance_dates else None
 
+            for row, instrument in enumerate(instruments):
+                # Create clickable name label
+                name_label = QLabel(instrument['name'])
+                name_label.setStyleSheet("""
+                    QLabel {
+                        color: #0d47a1;
+                        text-decoration: underline;
+                    }
+                    QLabel:hover {
+                        color: #1565c0;
+                        cursor: pointer;
+                    }
+                """)
+                name_label.mousePressEvent = lambda e, iid=instrument['id']: self.show_instrument_details(iid)
+                
+                # Add name label to second column (after ID)
+                self.table.setCellWidget(row, 1, name_label)
+                
+                # Add other columns
                 for col, value in enumerate([
-                    instrument['name'],
+                    instrument['id'],
                     instrument['model'],
                     instrument['serial_number'],
                     instrument['location'],
-                    instrument['brand'],
                     instrument['status'],
-                    instrument['responsible_username'] or 'Not assigned',
-                    str(instrument['last_maintenance_1'] or 'Never'),
-                    str(instrument['last_maintenance_2'] or 'Never'),
-                    str(instrument['last_maintenance_3'] or 'Never'),
-                    str(next_maintenance or 'Not scheduled'),
-                    instrument['maintenance_type_1'] or '',
-                    str(instrument['period_1']) if instrument['period_1'] else '',
-                    instrument['maintenance_type_2'] or '',
-                    str(instrument['period_2']) if instrument['period_2'] else '',
-                    instrument['maintenance_type_3'] or '',
-                    str(instrument['period_3']) if instrument['period_3'] else ''
-                ]):
-                    item = QTableWidgetItem(value)
-                    item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                    self.table.setItem(i, col, item)
+                    instrument['brand'],
+                    instrument['responsible_user'] or 'Not Assigned',
+                    format_date_for_display(instrument['next_maintenance']) if instrument['next_maintenance'] else 'Not Scheduled'
+                ], 0):
+                    if col == 1:  # Skip name column as it's already set
+                        continue
+                    item = QTableWidgetItem(str(value))
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    self.table.setItem(row, col, item)
 
+            # Resize columns to content
+            self.table.resizeColumnsToContents()
+            
         except Exception as e:
             QMessageBox.warning(self, 'Error', f'Failed to load instruments: {str(e)}')
 
@@ -561,21 +511,74 @@ class InstrumentsWindow(QWidget):
         dialog.finished.connect(self.load_instruments)  # Connect to finished signal to refresh list
         dialog.show()  # Changed from exec() to show()
 
-    def show_instrument_details(self, item):
-        instrument_id = self.get_instrument_id_from_row(item.row())
+    def show_instrument_details(self, instrument_id):
         dialog = InstrumentDetailsDialog(instrument_id, self.user_id, self.is_admin, self)
-        dialog.show()
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.load_instruments()
 
-    def get_instrument_id_from_row(self, row):
+    def delete_instrument(self):
+        """Delete the selected instrument"""
         try:
+            # Get selected row
+            selected_items = self.table.selectedItems()
+            if not selected_items:
+                QMessageBox.warning(self, 'Warning', 'Please select an instrument to delete')
+                return
+            
+            # Get the row index of the first selected item
+            row = selected_items[0].row()
+            
+            # Get instrument name and ID
+            instrument_name = self.table.cellWidget(row, 1).text()  # Name is in second column
+            instrument_id = self.table.item(row, 0).text()
+            
+            if not instrument_id:
+                QMessageBox.warning(self, 'Error', 'Could not find instrument ID')
+                return
+            
+            # Get count of maintenance records
             cursor = self.db.conn.cursor()
-            name = self.table.item(row, 0).text()
-            serial = self.table.item(row, 2).text()
-            cursor.execute("SELECT id FROM instruments WHERE name = ? AND serial_number = ?", (name, serial))
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM maintenance_records 
+                WHERE instrument_id = ?
+            """, (instrument_id,))
             result = cursor.fetchone()
-            return result['id'] if result else None
-        except Exception:
-            return None
+            maintenance_count = result['count']
+            
+            # Confirm deletion
+            reply = QMessageBox.question(
+                self, 'Confirm Deletion',
+                f'Are you sure you want to delete instrument {instrument_name}?\n\n'
+                f'This will also delete {maintenance_count} maintenance record(s).',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Start transaction
+                cursor.execute("BEGIN TRANSACTION")
+                
+                try:
+                    # Delete maintenance records first
+                    cursor.execute("DELETE FROM maintenance_records WHERE instrument_id = ?", (instrument_id,))
+                    
+                    # Delete instrument
+                    cursor.execute("DELETE FROM instruments WHERE id = ?", (instrument_id,))
+                    
+                    self.db.conn.commit()
+                    
+                    # Refresh instruments table
+                    self.load_instruments()
+                    
+                    QMessageBox.information(self, 'Success', f'Instrument {instrument_name} deleted successfully')
+                    
+                except Exception as e:
+                    self.db.conn.rollback()
+                    raise e
+                
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', f'Failed to delete instrument: {str(e)}')
 
 class CentralWindow(QMainWindow):
     def __init__(self):
@@ -782,4 +785,68 @@ class CentralWindow(QMainWindow):
         # Update size of current widget when window is moved
         current_widget = self.stacked_widget.currentWidget()
         if current_widget:
-            current_widget.resize(self.size()) 
+            current_widget.resize(self.size())
+
+    def delete_user(self):
+        """Delete the selected user"""
+        try:
+            # Get selected row
+            selected_items = self.users_table.selectedItems()
+            if not selected_items:
+                QMessageBox.warning(self, 'Warning', 'Please select a user to delete')
+                return
+            
+            # Get the row index of the first selected item
+            row = selected_items[0].row()
+            user_id = self.users_table.item(row, 0).text()
+            username = self.users_table.item(row, 1).text()
+            
+            # Check if user is responsible for any instruments
+            cursor = self.db.conn.cursor()
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM instruments 
+                WHERE responsible_user_id = ?
+            """, (user_id,))
+            result = cursor.fetchone()
+            
+            if result['count'] > 0:
+                # Get list of instruments where user is responsible
+                cursor.execute("""
+                    SELECT name 
+                    FROM instruments 
+                    WHERE responsible_user_id = ?
+                """, (user_id,))
+                instruments = cursor.fetchall()
+                instrument_list = "\n".join([f"- {inst['name']}" for inst in instruments])
+                
+                QMessageBox.warning(
+                    self, 
+                    'Cannot Delete User',
+                    f'Cannot delete user {username} because they are responsible for the following instruments:\n\n'
+                    f'{instrument_list}\n\n'
+                    'Please reassign these instruments to another user before deleting.'
+                )
+                return
+            
+            # Confirm deletion
+            reply = QMessageBox.question(
+                self, 'Confirm Deletion',
+                f'Are you sure you want to delete user {username}?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Delete user
+                cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+                self.db.conn.commit()
+                
+                # Refresh users table
+                self.load_users()
+                
+                QMessageBox.information(self, 'Success', f'User {username} deleted successfully')
+                
+        except Exception as e:
+            self.db.conn.rollback()
+            QMessageBox.warning(self, 'Error', f'Failed to delete user: {str(e)}') 
