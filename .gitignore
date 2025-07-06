@@ -1,2 +1,24 @@
-# Ignore dist folder
+# Ignore dist folder (build output)
 dist/
+
+# Ignore build artifacts
+build/
+*.spec
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore database lock files
+*.lock
+
+# Ignore test files
+test_*.py
+
+# Ignore temporary files
+*.tmp
+*.temp
+
+# Allow releases folder to be committed
+!releases/
