@@ -357,6 +357,36 @@ class InstrumentDetailsDialog(QDialog):
                 self.instrument_id
             ))
 
+            # Save changes to maintenance history
+            for row in range(self.history_table.rowCount()):
+                date = self.history_table.item(row, 0).text()
+                maint_type = self.history_table.item(row, 1).text()
+                performed_by = self.history_table.item(row, 2).text()
+                notes = self.history_table.item(row, 3).text()
+
+                # Get maintenance type ID
+                cursor.execute("SELECT id FROM maintenance_types WHERE name = ?", (maint_type,))
+                maint_type_result = cursor.fetchone()
+                if not maint_type_result:
+                    continue
+                maint_type_id = maint_type_result['id']
+
+                # Get user ID
+                cursor.execute("SELECT id FROM users WHERE username = ?", (performed_by,))
+                user_result = cursor.fetchone()
+                if not user_result:
+                    continue
+                user_id = user_result['id']
+
+                # Update maintenance record
+                cursor.execute("""
+                    UPDATE maintenance_records 
+                    SET notes = ?, performed_by = ?
+                    WHERE instrument_id = ? 
+                    AND maintenance_date = ?
+                    AND maintenance_type_id = ?
+                """, (notes, user_id, self.instrument_id, date, maint_type_id))
+
             self.db.conn.commit()
             self.set_edit_mode(False)  # Return to read-only mode
             self.load_instrument_data()  # Refresh the data
@@ -424,6 +454,10 @@ class InstrumentDetailsDialog(QDialog):
                 self.period2_input.setText(str(instrument['period_2']) if instrument['period_2'] else '')
                 self.period3_input.setText(str(instrument['period_3']) if instrument['period_3'] else '')
 
+            # Store current column widths
+            schedule_widths = [self.schedule_table.columnWidth(i) for i in range(self.schedule_table.columnCount())]
+            history_widths = [self.history_table.columnWidth(i) for i in range(self.history_table.columnCount())]
+
             # Load maintenance schedule
             cursor.execute("""
                 SELECT 
@@ -471,9 +505,6 @@ class InstrumentDetailsDialog(QDialog):
                         item = QTableWidgetItem(value)
                         item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                         self.schedule_table.setItem(i, col, item)
-                
-                # Resize columns to content
-                self.schedule_table.resizeColumnsToContents()
 
             # Load maintenance history
             cursor.execute("""
@@ -489,17 +520,20 @@ class InstrumentDetailsDialog(QDialog):
             self.history_table.setRowCount(len(history))
             for i, record in enumerate(history):
                 for col, value in enumerate([
-                    str(record['maintenance_date']),
+                    format_date_for_display(record['maintenance_date']),
                     record['type_name'],
                     record['performed_by'],
                     record['notes']
                 ]):
-                    item = QTableWidgetItem(value)
+                    item = QTableWidgetItem(str(value))
                     item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                     self.history_table.setItem(i, col, item)
-            
-            # Resize columns to content
-            self.history_table.resizeColumnsToContents()
+
+            # Restore column widths
+            for i, width in enumerate(schedule_widths):
+                self.schedule_table.setColumnWidth(i, width)
+            for i, width in enumerate(history_widths):
+                self.history_table.setColumnWidth(i, width)
 
         except Exception as e:
             QMessageBox.warning(self, 'Error', f'Failed to load instrument data: {str(e)}')

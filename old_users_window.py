@@ -108,14 +108,14 @@ class UserDialog(QDialog):
             self.accept()
             
             # Force refresh of parent window's table
-            if isinstance(self.parent(), UsersWindow):
+            if isinstance(self.parent(), OldUsersWindow):
                 self.parent().load_users()
                 
         except Exception as e:
             QMessageBox.warning(self, 'Error', str(e))
             self.db.conn.rollback()  # Rollback on error
 
-class UsersWindow(QWidget):
+class OldUsersWindow(QWidget):
     back_signal = pyqtSignal()  # Signal to go back to main menu
 
     def __init__(self, user_id, is_admin, db=None):

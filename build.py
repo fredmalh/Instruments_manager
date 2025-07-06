@@ -46,7 +46,7 @@ def build_application():
     print("\nTo run the application:")
     print(f"1. Navigate to: {dist_dir}")
     print("2. Run main.exe")
-    print("\nNote: The database is stored in: D:/CURSOR/PROJECTS/LabManager/Database")
+    print("\nNote: The database will be created in the same directory as the executable (lab_instruments.db)")
 
 if __name__ == "__main__":
     build_application()

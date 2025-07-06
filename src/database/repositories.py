@@ -22,43 +22,46 @@ class UserRepository(BaseRepository):
     
     def verify_password(self, username: str, password: str) -> Optional[Dict[str, Any]]:
         """Verify user password and return user data if valid"""
-        user = self.get_user_by_username(username)
-        if user and bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
+        user = self.db.execute_query_one(
+            "SELECT id, password, is_admin FROM users WHERE username = ?",
+            (username,)
+        )
+        if user and bcrypt.checkpw(password.encode('utf-8'), user['password']):
             return user
         return None
     
-    def hash_password(self, password: str) -> str:
+    def hash_password(self, password: str) -> bytes:
         """Hash password using bcrypt"""
         salt = bcrypt.gensalt()
-        return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+        return bcrypt.hashpw(password.encode('utf-8'), salt)
     
-    def create_user(self, username: str, email: str, password: str, role: str) -> int:
+    def create_user(self, username: str, email: str, password: str, is_admin: bool) -> int:
         """Create a new user"""
         hashed_password = self.hash_password(password)
         query = """
-            INSERT INTO users (username, email, password, role)
+            INSERT INTO users (username, email, password, is_admin)
             VALUES (?, ?, ?, ?)
         """
-        return self.db.execute_update(query, (username, email, hashed_password, role))
+        return self.db.execute_update(query, (username, email, hashed_password, is_admin))
     
-    def update_user(self, user_id: int, username: str, email: str, 
-                   password: Optional[str], role: str) -> int:
-        """Update user details"""
+    def update_user(self, user_id: int, username: str, email: str,
+                   password: Optional[str], is_admin: bool) -> int:
+        """Update an existing user"""
         if password:
             hashed_password = self.hash_password(password)
             query = """
                 UPDATE users 
-                SET username = ?, email = ?, password = ?, role = ?
+                SET username = ?, email = ?, password = ?, is_admin = ?
                 WHERE id = ?
             """
-            params = (username, email, hashed_password, role, user_id)
+            params = (username, email, hashed_password, is_admin, user_id)
         else:
             query = """
                 UPDATE users 
-                SET username = ?, email = ?, role = ?
+                SET username = ?, email = ?, is_admin = ?
                 WHERE id = ?
             """
-            params = (username, email, role, user_id)
+            params = (username, email, is_admin, user_id)
         return self.db.execute_update(query, params)
     
     def delete_user(self, user_id: int) -> int:

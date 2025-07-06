@@ -1,39 +1,75 @@
 from PyQt6.QtWidgets import (QFormLayout, QLineEdit, QComboBox, 
-                             QDialog)
+                             QDialog, QPushButton, QVBoxLayout, QHBoxLayout, QLabel,
+                             QCheckBox, QApplication)
 from ..base.base_dialog import BaseDialog
-import hashlib
+import bcrypt
 
 class AddUserDialog(BaseDialog):
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Add New User')
+        super().__init__(parent)  # This will call init_ui() from BaseDialog
+        self.setWindowTitle('Add User')
         self.setMinimumWidth(400)
-        self.init_ui()
+        
+        # Center the dialog on screen
+        screen = QApplication.primaryScreen().geometry()
+        x = (screen.width() - self.width()) // 2
+        y = (screen.height() - self.height()) // 2
+        self.move(x, y)
+        
+        # Make sure dialog is visible and on top
+        self.setVisible(True)
+        self.raise_()
+        self.activateWindow()
 
     def init_ui(self):
+        """Initialize the UI. This is called by BaseDialog.__init__"""
+        # Create main layout first
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(10)
+
         # Create form layout
         form_layout = QFormLayout()
         form_layout.setSpacing(10)
 
         # Create input fields
         self.username_input = QLineEdit()
+        self.username_input.setObjectName("username_input")
+        self.username_input.setText("")  # Explicitly set empty text
+        self.username_input.setPlaceholderText("Enter username")
+        self.username_input.setMinimumWidth(200)  # Set minimum width
+        
         self.email_input = QLineEdit()
+        self.email_input.setObjectName("email_input")
+        self.email_input.setText("")
+        self.email_input.setPlaceholderText("Enter email")
+        self.email_input.setMinimumWidth(200)
+        
         self.password_input = QLineEdit()
+        self.password_input.setObjectName("password_input")
+        self.password_input.setText("")
+        self.password_input.setPlaceholderText("Enter password")
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password_input.setMinimumWidth(200)
+        
         self.confirm_password_input = QLineEdit()
+        self.confirm_password_input.setObjectName("confirm_password_input")
+        self.confirm_password_input.setText("")
+        self.confirm_password_input.setPlaceholderText("Confirm password")
         self.confirm_password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.role_input = QComboBox()
-        self.role_input.addItems(['User', 'Admin'])
+        self.confirm_password_input.setMinimumWidth(200)
+        
+        self.is_admin_checkbox = QCheckBox()
+        self.is_admin_checkbox.setObjectName("is_admin_checkbox")
+        self.is_admin_checkbox.setStyleSheet("QCheckBox { color: white; }")
 
         # Add fields to form
         form_layout.addRow('Username:', self.username_input)
         form_layout.addRow('Email:', self.email_input)
         form_layout.addRow('Password:', self.password_input)
         form_layout.addRow('Confirm Password:', self.confirm_password_input)
-        form_layout.addRow('Role:', self.role_input)
+        form_layout.addRow('Admin:', self.is_admin_checkbox)
 
-        # Create main layout
-        main_layout = self.layout()
+        # Add layouts to main layout
         main_layout.addLayout(form_layout)
         main_layout.addLayout(self.create_button_layout())
 
@@ -46,27 +82,12 @@ class AddUserDialog(BaseDialog):
             self.show_error('Error', 'Passwords do not match')
             return False
 
-        if len(password) < 8:
-            self.show_error('Error', 'Password must be at least 8 characters long')
-            return False
-
-        if not any(c.isupper() for c in password):
-            self.show_error('Error', 'Password must contain at least one uppercase letter')
-            return False
-
-        if not any(c.islower() for c in password):
-            self.show_error('Error', 'Password must contain at least one lowercase letter')
-            return False
-
-        if not any(c.isdigit() for c in password):
-            self.show_error('Error', 'Password must contain at least one number')
-            return False
-
         return True
 
     def hash_password(self, password):
-        """Hash the password using SHA-256"""
-        return hashlib.sha256(password.encode()).hexdigest()
+        """Hash the password using bcrypt"""
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(password.encode('utf-8'), salt)
 
     def accept(self):
         # Validate required fields
@@ -89,33 +110,30 @@ class AddUserDialog(BaseDialog):
             cursor = self.db.conn.cursor()
             
             # Check if username already exists
-            cursor.execute("SELECT id FROM users WHERE username = ?", 
-                         (self.username_input.text(),))
+            cursor.execute("SELECT id FROM users WHERE username = ?", (self.username_input.text(),))
             if cursor.fetchone():
                 self.show_error('Error', 'Username already exists')
                 return
 
             # Check if email already exists
-            cursor.execute("SELECT id FROM users WHERE email = ?", 
-                         (self.email_input.text(),))
+            cursor.execute("SELECT id FROM users WHERE email = ?", (self.email_input.text(),))
             if cursor.fetchone():
                 self.show_error('Error', 'Email already exists')
                 return
 
-            # Insert new user
+            # Create new user
             cursor.execute("""
-                INSERT INTO users (
-                    username, email, password, role
-                ) VALUES (?, ?, ?, ?)
+                INSERT INTO users (username, email, password, is_admin)
+                VALUES (?, ?, ?, ?)
             """, (
                 self.username_input.text(),
                 self.email_input.text(),
                 self.hash_password(self.password_input.text()),
-                self.role_input.currentText()
+                self.is_admin_checkbox.isChecked()
             ))
             
             self.db.conn.commit()
             super().accept()
             
         except Exception as e:
-            self.show_error('Error', f'Failed to add user: {str(e)}') 
+            self.show_error('Error', f'Failed to create user: {str(e)}') 

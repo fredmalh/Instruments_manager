@@ -3,15 +3,14 @@ import bcrypt
 import os
 import sys
 from datetime import datetime
+from src.utils.path_utils import get_database_directory, get_database_path
 
 def create_database():
-    # Set fixed database directory
-    app_data_dir = 'D:/CURSOR/PROJECTS/LabManager/Database'
-    if not os.path.exists(app_data_dir):
-        os.makedirs(app_data_dir)
-        
+    # Get database directory using the new path utility
+    app_data_dir = get_database_directory()
+    
     # Set database path
-    db_path = os.path.join(app_data_dir, 'lab_instruments.db')
+    db_path = get_database_path()
     print(f"Creating database at: {db_path}")
     
     # Remove existing database if it exists

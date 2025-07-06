@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox, QHeaderView
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox, QHeaderView, QDialog)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from ..base.base_data_window import BaseDataWindow
@@ -39,7 +39,7 @@ class InstrumentsWindow(BaseDataWindow):
                 'text': 'Add Instrument',
                 'callback': self.add_instrument,
                 'visible_if_admin': True,
-                'position': 'left'
+                'position': 'center'
             },
             {
                 'text': 'Refresh',
@@ -49,7 +49,7 @@ class InstrumentsWindow(BaseDataWindow):
             {
                 'text': 'Back to Main Menu',
                 'callback': self.back_signal.emit,
-                'position': 'right'
+                'position': 'center'
             }
         ]
         self.main_layout.addLayout(self.create_button_layout(buttons_config))
@@ -103,8 +103,9 @@ class InstrumentsWindow(BaseDataWindow):
             self.table.clear_table()
             
             for instrument in cursor.fetchall():
-                # Add row using BaseTable's add_row method with row_id
-                self.table.add_row([
+                # Create items for each column
+                items = []
+                for col, value in enumerate([
                     instrument['name'],  # Instrument
                     instrument['brand'],  # Brand
                     instrument['model'],  # Model
@@ -113,12 +114,29 @@ class InstrumentsWindow(BaseDataWindow):
                     instrument['status'],  # Status
                     instrument['responsible_user'] or 'Not Assigned',  # Responsible User
                     format_date_for_display(instrument['next_maintenance']) if instrument['next_maintenance'] else 'Not Scheduled'  # Next Maintenance
-                ], instrument['id'])  # Pass the instrument ID as row_id
+                ]):
+                    item = QTableWidgetItem(str(value))
+                    if col == 0:  # First column (Instrument name)
+                        item.setForeground(Qt.GlobalColor.blue)  # Set text color to blue
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make item read-only
+                    items.append(item)
+                
+                # Add row with items
+                row = self.table.rowCount()
+                self.table.insertRow(row)
+                for col, item in enumerate(items):
+                    self.table.setItem(row, col, item)
+                
+                # Store the instrument ID in the first column
+                self.table.item(row, 0).setData(Qt.ItemDataRole.UserRole, instrument['id'])
             
         except Exception as e:
             QMessageBox.warning(self, 'Error', f'Failed to load instruments: {str(e)}')
 
     def add_instrument(self):
-        dialog = AddInstrumentDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.load_data() 
+        try:
+            dialog = AddInstrumentDialog(self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.load_data()
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Failed to add instrument: {str(e)}') 

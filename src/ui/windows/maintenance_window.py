@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
-                            QPushButton, QLabel, QMessageBox, QMainWindow)
+                            QPushButton, QLabel, QMessageBox, QMainWindow, QTableWidgetItem)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QBrush, QColor
 from database import Database
 from datetime import datetime, timedelta
 from date_utils import (
@@ -78,64 +78,77 @@ class MaintenanceWindow(BaseDataWindow):
                 )
                 SELECT 
                     i.id,
-                    i.name,           -- Instrument
-                    i.brand,          -- Brand
-                    i.model,          -- Model
-                    i.serial_number,  -- Serial Number
-                    i.location,       -- Location
-                    mt.name as maintenance_type,  -- Maintenance Type
-                    u.username as performed_by,   -- Performed By
-                    mr.maintenance_date as last_maintenance,  -- Last Maintenance
+                    i.name,
+                    i.brand,
+                    i.model,
+                    i.serial_number,
+                    i.location,
+                    mt.name as maintenance_type,
+                    u.username as performed_by,
+                    md.last_date as last_maintenance,
                     CASE 
-                        WHEN i.maintenance_1 IS NOT NULL AND i.period_1 IS NOT NULL THEN
-                            CASE 
-                                WHEN md1.last_date IS NULL THEN
-                                    date(i.date_start_operating)
-                                ELSE
-                                    date(md1.last_date, '+' || (i.period_1 * 7) || ' days')
-                            END
-                        ELSE NULL
-                    END as next_maintenance,  -- Next Maintenance
-                    mr.notes  -- Notes
+                        WHEN md.last_date IS NULL THEN
+                            date(i.date_start_operating)
+                        ELSE
+                            date(md.last_date, '+' || (
+                                CASE 
+                                    WHEN i.maintenance_1 = mt.id THEN i.period_1
+                                    WHEN i.maintenance_2 = mt.id THEN i.period_2
+                                    WHEN i.maintenance_3 = mt.id THEN i.period_3
+                                END * 7
+                            ) || ' days')
+                    END as next_maintenance,
+                    (SELECT notes 
+                     FROM maintenance_records 
+                     WHERE instrument_id = i.id AND maintenance_type_id = mt.id 
+                     ORDER BY maintenance_date DESC LIMIT 1) as notes
                 FROM instruments i
-                LEFT JOIN maintenance_records mr ON i.id = mr.instrument_id
-                LEFT JOIN maintenance_types mt ON mr.maintenance_type_id = mt.id
-                LEFT JOIN users u ON mr.performed_by = u.id
-                LEFT JOIN maintenance_dates md1 ON i.id = md1.instrument_id AND i.maintenance_1 = md1.maintenance_type_id
-                ORDER BY i.name
+                JOIN maintenance_types mt ON mt.id IN (i.maintenance_1, i.maintenance_2, i.maintenance_3)
+                LEFT JOIN users u ON i.responsible_user_id = u.id
+                LEFT JOIN maintenance_dates md ON i.id = md.instrument_id AND mt.id = md.maintenance_type_id
+                WHERE i.status = 'Operational'
+                ORDER BY 
+                    CASE 
+                        WHEN next_maintenance IS NULL THEN 1 
+                        ELSE 0 
+                    END,
+                    next_maintenance ASC,
+                    i.name ASC,
+                    mt.name ASC
             """)
             
-            self.table.clear_table()
-            
-            # Store rows that need highlighting
-            rows_to_highlight = []
-            
-            for record in cursor.fetchall():
+            self.table.setRowCount(0)
+            for row, data in enumerate(cursor.fetchall()):
+                self.table.insertRow(row)
+                
                 # Get maintenance status using our utility function
-                status, color = get_maintenance_status(record['next_maintenance'])
+                status, color = get_maintenance_status(data['next_maintenance'])
                 
-                # Add row using BaseTable's add_row method with row_id
-                current_row = self.table.rowCount()
-                self.table.add_row([
-                    record['name'],  # Instrument
-                    record['brand'],  # Brand
-                    record['model'],  # Model
-                    record['serial_number'],  # Serial Number
-                    record['location'],  # Location
-                    record['maintenance_type'] or 'Not Specified',  # Maintenance Type
-                    record['performed_by'] or 'Not Assigned',  # Performed By
-                    format_date_for_display(record['last_maintenance']) if record['last_maintenance'] else 'Not Performed',  # Last Maintenance
-                    format_date_for_display(record['next_maintenance']) if record['next_maintenance'] else 'Not Scheduled',  # Next Maintenance
-                    record['notes'] or ''  # Notes
-                ], record['id'])  # Pass the instrument ID as row_id
+                # Format dates for display
+                last_maintenance_display = format_date_for_display(data['last_maintenance'])
+                next_maintenance_display = format_date_for_display(data['next_maintenance'])
                 
-                # Store row for highlighting if needed
+                # Add data to table
+                instrument_item = QTableWidgetItem(str(data['name']))
+                instrument_item.setForeground(QBrush(QColor("#4a9eff")))  # Light blue color for hyperlink
+                instrument_item.setData(Qt.ItemDataRole.UserRole, data['id'])
+                self.table.setItem(row, 0, instrument_item)
+                
+                self.table.setItem(row, 1, QTableWidgetItem(str(data['brand'])))
+                self.table.setItem(row, 2, QTableWidgetItem(str(data['model'])))
+                self.table.setItem(row, 3, QTableWidgetItem(str(data['serial_number'])))
+                self.table.setItem(row, 4, QTableWidgetItem(str(data['location'])))
+                self.table.setItem(row, 5, QTableWidgetItem(str(data['maintenance_type'])))
+                self.table.setItem(row, 6, QTableWidgetItem(str(data['performed_by'] or 'Not assigned')))
+                self.table.setItem(row, 7, QTableWidgetItem(last_maintenance_display))
+                self.table.setItem(row, 8, QTableWidgetItem(next_maintenance_display))
+                self.table.setItem(row, 9, QTableWidgetItem(str(data['notes'] or '')))
+                
+                # Apply row highlighting if needed
                 if color:
-                    rows_to_highlight.append((current_row, color))
-            
-            # Apply highlighting after all rows are added
-            for row, color in rows_to_highlight:
-                self.table.highlight_row(row, color)
+                    self.table.highlight_row(row, color)
+                    # Re-apply blue color to instrument name after highlighting
+                    self.table.item(row, 0).setForeground(QBrush(QColor("#4a9eff")))
             
         except Exception as e:
             QMessageBox.warning(self, 'Error', f'Failed to load maintenance data: {str(e)}') 

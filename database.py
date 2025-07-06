@@ -7,19 +7,23 @@ import socket
 import time
 from pathlib import Path
 import sys
+import signal
 from PyQt6.QtWidgets import QMessageBox
+from src.utils.path_utils import get_database_directory, get_database_path
 
 class Database:
     def __init__(self):
-        # Set fixed database directory
-        app_data_dir = 'D:/CURSOR/PROJECTS/LabManager/Database'
-        if not os.path.exists(app_data_dir):
-            os.makedirs(app_data_dir)
-            
+        # Get database directory using the new path utility
+        app_data_dir = get_database_directory()
+        
         # Set database path
-        self.db_path = os.path.join(app_data_dir, 'lab_instruments.db')
+        self.db_path = get_database_path()
         self.lock_file = os.path.join(app_data_dir, 'db.lock')
         self.lock_timeout = 30  # seconds
+        
+        # Register signal handlers for graceful shutdown
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
         
         # Check if database exists
         if not os.path.exists(self.db_path):
@@ -45,6 +49,14 @@ class Database:
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
         self.has_unsaved_changes = False
+
+    def _signal_handler(self, signum, frame):
+        """Handle system signals for graceful shutdown"""
+        print(f"Received signal {signum}, cleaning up...")
+        self.release_lock()
+        if hasattr(self, 'conn'):
+            self.conn.close()
+        sys.exit(0)
 
     def acquire_lock(self):
         """Try to acquire a lock on the database file"""
@@ -72,10 +84,10 @@ class Database:
                             timestamp = lock_data.get('timestamp', '')
                             print(f"Lock file contents: {lock_data}")
                             
-                            # Check if the lock is stale (older than 5 minutes)
+                            # Check if the lock is stale (older than 1 minute)
                             if timestamp:
                                 lock_time = datetime.fromisoformat(timestamp)
-                                if (datetime.now() - lock_time).total_seconds() > 300:  # 5 minutes
+                                if (datetime.now() - lock_time).total_seconds() > 60:  # 1 minute
                                     print(f"Removing stale lock from {current_user} on {hostname}")
                                     os.remove(self.lock_file)
                                     continue
