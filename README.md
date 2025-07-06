@@ -6,7 +6,7 @@ A desktop application for managing laboratory instruments and their maintenance 
 Executable file reading a SQLite database located in the same folder as the app.
 1 file (crate_database.py) creates the database.
 1 file (build.py) creates the executable file.
-You can also download the app and db directly built, from the folder called "dist"
+You can also download the app and db directly built (maine.exe), from the folder called "releases/v1.0.0"
 No need to have python installed to use them
 
 
