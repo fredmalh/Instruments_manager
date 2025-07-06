@@ -2,29 +2,28 @@
 
 A desktop application for managing laboratory instruments and their maintenance operations.
 
+
+Executable file reading a SQLite database located in the same folder as the app.
+1 file (crate_database.py) creates the database.
+1 file (build.py) creates the executable file.
+You can also download the app and db directly built, from the folder called "dist"
+No need to have python installed to use them
+
+
 ## Features
 - User authentication with different access levels (admin and normal users)
 - Instrument management
 - Maintenance operation tracking
 - Different maintenance frequencies (weekly, monthly, quarterly, yearly)
 
-## Setup
-1. Install Python 3.8 or higher
-2. Install dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
-3. Run the application:
-   ```
-   python main.py
-   ```
+
 
 ## Default Users
 ### Administrators
-- Username: admin1, Password: admin123
-- Username: admin2, Password: admin456
+- Username: admin1, Password: admin111
+- Username: admin2, Password: admin222
 
 ### Normal Users
-- Username: user1, Password: user123
-- Username: user2, Password: user456
-- Username: user3, Password: user789 
+- Username: user1, Password: user111
+- Username: user2, Password: user222
+- Username: user3, Password: user333
