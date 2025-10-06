@@ -76,6 +76,7 @@ class AddInstrumentDialog(BaseDialog):
         self.date_start_input = QDateEdit()
         self.date_start_input.setDate(QDate.currentDate())
         self.date_start_input.setCalendarPopup(True)
+        self.date_start_input.setDisplayFormat("yyyy-MM-dd")  # Set YYYY-MM-DD format
 
         # Populate responsible user
         self.load_users()
@@ -184,7 +185,7 @@ class AddInstrumentDialog(BaseDialog):
                 self.status_input.currentText(),
                 brand_text,
                 self.responsible_user_input.currentData(),
-                self.date_start_input.date().toPyDate(),
+                self.date_start_input.date().toPyDate().strftime('%Y-%m-%d'),
                 self.maintenance_type1.currentData(),
                 self.period1_input.text() or None,
                 self.maintenance_type2.currentData(),

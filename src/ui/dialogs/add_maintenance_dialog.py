@@ -28,6 +28,7 @@ class AddMaintenanceDialog(BaseDialog):
         self.date_input = QDateEdit()
         self.date_input.setCalendarPopup(True)
         self.date_input.setDate(QDate.currentDate())
+        self.date_input.setDisplayFormat("yyyy-MM-dd")  # Set YYYY-MM-DD format
         self.notes_input = QTextEdit()
         self.notes_input.setMaximumHeight(100)
 
@@ -170,6 +171,9 @@ class AddMaintenanceDialog(BaseDialog):
         try:
             cursor = self.db.conn.cursor()
             
+            # Convert QDate to YYYY-MM-DD string format
+            maintenance_date = self.date_input.date().toPyDate().strftime('%Y-%m-%d')
+            
             # Add maintenance record
             cursor.execute("""
                 INSERT INTO maintenance_records (
@@ -179,7 +183,7 @@ class AddMaintenanceDialog(BaseDialog):
             """, (
                 self.instrument_id,
                 self.maintenance_type_input.currentData(),
-                self.date_input.date().toPyDate(),
+                maintenance_date,
                 self.user_id,
                 self.notes_input.toPlainText()
             ))

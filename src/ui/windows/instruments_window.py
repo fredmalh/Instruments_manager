@@ -42,6 +42,12 @@ class InstrumentsWindow(BaseDataWindow):
                 'position': 'center'
             },
             {
+                'text': 'Delete Instrument',
+                'callback': self.delete_selected_instrument,
+                'visible_if_admin': True,
+                'position': 'center'
+            },
+            {
                 'text': 'Refresh',
                 'callback': self.load_data,
                 'position': 'center'
@@ -139,4 +145,51 @@ class InstrumentsWindow(BaseDataWindow):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.load_data()
         except Exception as e:
-            QMessageBox.critical(self, 'Error', f'Failed to add instrument: {str(e)}') 
+            QMessageBox.critical(self, 'Error', f'Failed to add instrument: {str(e)}')
+
+    def delete_selected_instrument(self):
+        """Delete the selected instrument"""
+        try:
+            # Get selected row
+            selected_items = self.table.selectedItems()
+            if not selected_items:
+                QMessageBox.warning(self, 'Warning', 'Please select an instrument to delete')
+                return
+            
+            # Get the row index of the first selected item
+            row = selected_items[0].row()
+            instrument_id = self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+            instrument_name = self.table.item(row, 0).text()
+            
+            # Check if instrument has maintenance records
+            cursor = self.db.conn.cursor()
+            cursor.execute("SELECT COUNT(*) as count FROM maintenance_records WHERE instrument_id = ?", (instrument_id,))
+            result = cursor.fetchone()
+            
+            if result['count'] > 0:
+                QMessageBox.warning(
+                    self, 
+                    'Cannot Delete Instrument',
+                    f'Cannot delete instrument "{instrument_name}" because it has maintenance records.\n\n'
+                    'Please delete all maintenance records first, or contact an administrator.'
+                )
+                return
+            
+            # Confirm deletion
+            reply = QMessageBox.question(
+                self, 'Confirm Deletion',
+                f'Are you sure you want to delete instrument "{instrument_name}"?\n\n'
+                'This action cannot be undone.',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                cursor.execute("DELETE FROM instruments WHERE id = ?", (instrument_id,))
+                self.db.conn.commit()
+                self.load_data()
+                QMessageBox.information(self, 'Success', f'Instrument "{instrument_name}" deleted successfully')
+                
+        except Exception as e:
+            self.db.conn.rollback()
+            QMessageBox.warning(self, 'Error', f'Failed to delete instrument: {str(e)}') 

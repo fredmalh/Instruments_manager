@@ -1,5 +1,23 @@
 from datetime import datetime, timedelta
 
+def validate_date_format(date_str):
+    """
+    Validate that a date string is in YYYY-MM-DD format.
+    
+    Args:
+        date_str (str): Date string to validate
+        
+    Returns:
+        bool: True if valid YYYY-MM-DD format, False otherwise
+    """
+    try:
+        if not date_str or date_str.strip() == '':
+            return False
+        datetime.strptime(date_str.strip(), '%Y-%m-%d')
+        return True
+    except ValueError:
+        return False
+
 def calculate_next_maintenance(last_maintenance_date, period_weeks, start_date=None):
     """
     Calculate the next maintenance date based on the last maintenance date and period.
@@ -33,15 +51,18 @@ def format_date_for_display(date_str):
         date_str (str): Date in 'YYYY-MM-DD' format
         
     Returns:
-        str: Date in 'YYYY-MM-DD' format
+        str: Date in 'YYYY-MM-DD' format or 'Never' or 'Invalid Date'
     """
     try:
         if not date_str or date_str == 'Never':
             return 'Never'
             
-        # Parse the date to validate it
-        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-        return date_str  # Return in YYYY-MM-DD format
+        # Validate it's already in YYYY-MM-DD format
+        datetime.strptime(date_str, '%Y-%m-%d')
+        return date_str  # Return exactly as received
+    except ValueError:
+        print(f"Error: Invalid date format '{date_str}'. Expected YYYY-MM-DD format.")
+        return 'Invalid Date'
     except Exception as e:
         print(f"Error formatting date: {str(e)}")
         return 'Invalid Date'
@@ -54,14 +75,18 @@ def format_date_for_db(date_str):
         date_str (str): Date in 'YYYY-MM-DD' format
         
     Returns:
-        str: Date in 'YYYY-MM-DD' format
+        str: Date in 'YYYY-MM-DD' format or None if invalid
     """
     try:
         if not date_str or date_str == 'Never':
             return None
-        # Parse the date to validate it
-        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-        return date_str  # Return in YYYY-MM-DD format
+            
+        # Validate it's in YYYY-MM-DD format
+        datetime.strptime(date_str, '%Y-%m-%d')
+        return date_str  # Return exactly as received
+    except ValueError:
+        print(f"Error: Invalid date format '{date_str}' for database. Expected YYYY-MM-DD format.")
+        return None
     except Exception as e:
         print(f"Error formatting date for DB: {str(e)}")
         return None

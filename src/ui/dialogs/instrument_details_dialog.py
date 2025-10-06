@@ -10,7 +10,8 @@ from date_utils import (
     calculate_next_maintenance,
     format_date_for_display,
     format_date_for_db,
-    get_maintenance_status
+    get_maintenance_status,
+    validate_date_format
 )
 from .add_maintenance_dialog import AddMaintenanceDialog
 
@@ -21,6 +22,7 @@ class InstrumentDetailsDialog(QDialog):
         self.user_id = user_id
         self.is_admin = is_admin
         self.db = Database()
+        self.original_maintenance_data = {}  # Store original data for comparison
         self.init_ui()
         self.apply_dark_theme()
         self.load_instrument_data()
@@ -319,11 +321,8 @@ class InstrumentDetailsDialog(QDialog):
                 return
 
             # Validate date format
-            try:
-                # Validate date is in YYYY-MM-DD format
-                datetime.strptime(date_start, '%Y-%m-%d')
-            except ValueError:
-                QMessageBox.warning(self, 'Error', 'Please enter date in YYYY-MM-DD format')
+            if not validate_date_format(date_start):
+                QMessageBox.warning(self, 'Error', f'Please enter date in YYYY-MM-DD format. You entered: "{date_start}"')
                 return
 
             # Validate maintenance periods
@@ -358,16 +357,37 @@ class InstrumentDetailsDialog(QDialog):
             ))
 
             # Save changes to maintenance history
+            print(f"DEBUG: Saving maintenance history changes for {self.history_table.rowCount()} rows")
             for row in range(self.history_table.rowCount()):
-                date = self.history_table.item(row, 0).text()
+                date_from_table = self.history_table.item(row, 0).text()
                 maint_type = self.history_table.item(row, 1).text()
                 performed_by = self.history_table.item(row, 2).text()
                 notes = self.history_table.item(row, 3).text()
+                
+                # Check if this row has actually changed
+                if row in self.original_maintenance_data:
+                    original = self.original_maintenance_data[row]
+                    if (original['notes'] == notes and 
+                        original['performed_by'] == performed_by):
+                        print(f"DEBUG: Row {row} - No changes detected, skipping")
+                        continue
+                
+                print(f"DEBUG: Row {row} data (CHANGED):")
+                print(f"  - Date: '{date_from_table}'")
+                print(f"  - Type: '{maint_type}'")
+                print(f"  - Performed by: '{performed_by}'")
+                print(f"  - Notes: '{notes}'")
+
+                # Validate date format (should already be YYYY-MM-DD)
+                if not validate_date_format(date_from_table):
+                    print(f"Warning: Skipping row {row} - invalid date format: '{date_from_table}'")
+                    continue
 
                 # Get maintenance type ID
                 cursor.execute("SELECT id FROM maintenance_types WHERE name = ?", (maint_type,))
                 maint_type_result = cursor.fetchone()
                 if not maint_type_result:
+                    print(f"Warning: Skipping row {row} - maintenance type not found: '{maint_type}'")
                     continue
                 maint_type_id = maint_type_result['id']
 
@@ -375,17 +395,41 @@ class InstrumentDetailsDialog(QDialog):
                 cursor.execute("SELECT id FROM users WHERE username = ?", (performed_by,))
                 user_result = cursor.fetchone()
                 if not user_result:
+                    print(f"Warning: Skipping row {row} - user not found: '{performed_by}'")
                     continue
                 user_id = user_result['id']
 
-                # Update maintenance record
+                # Update maintenance record (date should already be in YYYY-MM-DD format)
+                print(f"DEBUG: Updating maintenance record:")
+                print(f"  - instrument_id: {self.instrument_id}")
+                print(f"  - date_from_table: '{date_from_table}'")
+                print(f"  - maint_type_id: {maint_type_id}")
+                print(f"  - user_id: {user_id}")
+                print(f"  - notes: '{notes}'")
+                
                 cursor.execute("""
                     UPDATE maintenance_records 
                     SET notes = ?, performed_by = ?
                     WHERE instrument_id = ? 
                     AND maintenance_date = ?
                     AND maintenance_type_id = ?
-                """, (notes, user_id, self.instrument_id, date, maint_type_id))
+                """, (notes, user_id, self.instrument_id, date_from_table, maint_type_id))
+                
+                rows_affected = cursor.rowcount
+                print(f"  - Rows affected: {rows_affected}")
+                
+                if rows_affected == 0:
+                    print(f"  - WARNING: No rows were updated! Checking if record exists...")
+                    # Check if the record exists with different criteria
+                    cursor.execute("""
+                        SELECT id, maintenance_date, maintenance_type_id, notes, performed_by
+                        FROM maintenance_records 
+                        WHERE instrument_id = ? AND maintenance_type_id = ?
+                    """, (self.instrument_id, maint_type_id))
+                    existing_records = cursor.fetchall()
+                    print(f"  - Found {len(existing_records)} records for this instrument and maintenance type:")
+                    for record in existing_records:
+                        print(f"    * ID: {record['id']}, Date: '{record['maintenance_date']}', Notes: '{record['notes']}', Performed by: {record['performed_by']}")
 
             self.db.conn.commit()
             self.set_edit_mode(False)  # Return to read-only mode
@@ -394,6 +438,8 @@ class InstrumentDetailsDialog(QDialog):
             # Notify parent to refresh the list
             if hasattr(self.parent(), 'load_instruments'):
                 self.parent().load_instruments()
+            
+            QMessageBox.information(self, 'Success', 'Changes saved successfully!')
 
         except Exception as e:
             self.db.conn.rollback()
@@ -422,12 +468,11 @@ class InstrumentDetailsDialog(QDialog):
                 
                 # Format and set the date start operating
                 if instrument['date_start_operating']:
-                    try:
-                        # Validate date is in YYYY-MM-DD format
-                        datetime.strptime(instrument['date_start_operating'], '%Y-%m-%d')
+                    if validate_date_format(instrument['date_start_operating']):
                         self.date_start_input.setText(instrument['date_start_operating'])
-                    except:
-                        self.date_start_input.setText(instrument['date_start_operating'])
+                    else:
+                        print(f"Warning: Invalid date format in database: '{instrument['date_start_operating']}'")
+                        self.date_start_input.setText('')
                 else:
                     self.date_start_input.setText('')
                 
@@ -518,7 +563,17 @@ class InstrumentDetailsDialog(QDialog):
             history = cursor.fetchall()
 
             self.history_table.setRowCount(len(history))
+            self.original_maintenance_data = {}  # Reset original data
+            
             for i, record in enumerate(history):
+                # Store original data for comparison
+                self.original_maintenance_data[i] = {
+                    'date': record['maintenance_date'],
+                    'type': record['type_name'],
+                    'performed_by': record['performed_by'],
+                    'notes': record['notes']
+                }
+                
                 for col, value in enumerate([
                     format_date_for_display(record['maintenance_date']),
                     record['type_name'],
@@ -572,14 +627,19 @@ class InstrumentDetailsDialog(QDialog):
             row = selected_rows[0].row()
             
             # Get the maintenance date and type from the selected row
-            date = self.history_table.item(row, 0).text()
+            date_from_table = self.history_table.item(row, 0).text()
             maint_type = self.history_table.item(row, 1).text()
+            
+            # Validate date format (should already be YYYY-MM-DD)
+            if not validate_date_format(date_from_table):
+                QMessageBox.warning(self, 'Error', f'Invalid date format: {date_from_table}')
+                return
             
             # Confirm deletion
             reply = QMessageBox.question(
                 self, 'Confirm Deletion',
                 f'Are you sure you want to delete the maintenance record?\n\n'
-                f'Date: {date}\nType: {maint_type}',
+                f'Date: {date_from_table}\nType: {maint_type}',
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             )
@@ -587,7 +647,7 @@ class InstrumentDetailsDialog(QDialog):
             if reply == QMessageBox.StandardButton.Yes:
                 cursor = self.db.conn.cursor()
                 
-                # Delete the record
+                # Delete the record (date should already be in YYYY-MM-DD format)
                 cursor.execute("""
                     DELETE FROM maintenance_records 
                     WHERE instrument_id = ? 
@@ -595,7 +655,7 @@ class InstrumentDetailsDialog(QDialog):
                     AND maintenance_type_id = (
                         SELECT id FROM maintenance_types WHERE name = ?
                     )
-                """, (self.instrument_id, date, maint_type))
+                """, (self.instrument_id, date_from_table, maint_type))
                 
                 self.db.conn.commit()
                 self.load_instrument_data()  # Refresh the data

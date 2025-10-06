@@ -20,16 +20,12 @@ def build_application():
     else:
         print(f"Dist directory already exists: {dist_dir}")
     
-    # Build the application using PyInstaller
-    print("Building application with PyInstaller...")
+    # Build the application using PyInstaller with the basic spec file
+    print("Building application with PyInstaller using main.spec...")
     run([
-        'main.py',
-        '--onefile',
-        '--windowed',
-        '--name=main',
+        'main.spec',
         '--distpath=' + dist_dir,
         '--workpath=' + os.path.join(base_dir, 'build'),
-        '--specpath=' + base_dir,
         '--clean'
     ])
     

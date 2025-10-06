@@ -13,8 +13,10 @@ __pycache__/
 # Ignore database lock files
 *.lock
 
-# Ignore test files
+# Ignore test files and directories
 test_*.py
+test_files/
+previous_versions/
 
 # Ignore temporary files
 *.tmp

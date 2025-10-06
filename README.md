@@ -10,6 +10,9 @@ You can also download the app and db directly built, from the folder called "dis
 No need to have python installed to use them
 
 
+## Description of the dependencies in the file module_dependencies.md
+
+
 ## Features
 - User authentication with different access levels (admin and normal users)
 - Instrument management
@@ -17,11 +20,11 @@ No need to have python installed to use them
 - Different maintenance frequencies (weekly, monthly, quarterly, yearly)
 
 
-
 ## Default Users
 ### Administrators
 - Username: admin1, Password: admin111
 - Username: admin2, Password: admin222
+
 
 ### Normal Users
 - Username: user1, Password: user111
