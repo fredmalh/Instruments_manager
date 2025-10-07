@@ -24,6 +24,7 @@ class InstrumentDetailsDialog(QDialog):
         self.db = Database()
         self.original_maintenance_data = {}  # Store original data for comparison
         self.is_editing = False  # Track if dialog is in edit mode
+        self.add_maintenance_dialog_open = False  # Track dialog state
         self.init_ui()
         self.apply_dark_theme()
         self.load_instrument_data()
@@ -748,12 +749,19 @@ class InstrumentDetailsDialog(QDialog):
             return False
 
     def add_maintenance(self):
+        # Prevent multiple dialogs
+        if self.add_maintenance_dialog_open:
+            return
+        
+        self.add_maintenance_dialog_open = True
         try:
             dialog = AddMaintenanceDialog(self.instrument_id, self.user_id, self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.load_instrument_data()  # Refresh the data
         except Exception as e:
             QMessageBox.critical(self, 'Error', f'Failed to add maintenance record: {str(e)}')
+        finally:
+            self.add_maintenance_dialog_open = False
 
     def delete_maintenance(self):
         """Delete the selected maintenance record"""

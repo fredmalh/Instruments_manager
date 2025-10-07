@@ -14,6 +14,9 @@ class InstrumentsWindow(BaseDataWindow):
 
     def __init__(self, user_id, is_admin, db=None):
         super().__init__(user_id, is_admin, db)
+        # Track dialog states to prevent multiple openings
+        self.add_instrument_dialog_open = False
+        self.instrument_details_dialog_open = False
         self.init_ui()
 
     def init_ui(self):
@@ -65,8 +68,16 @@ class InstrumentsWindow(BaseDataWindow):
         if column == 0:  # Only handle clicks on the Instrument column
             instrument_id = self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
             if instrument_id:
-                dialog = InstrumentDetailsDialog(instrument_id, self.user_id, self.is_admin, self)
-                dialog.show()
+                # Prevent multiple dialogs
+                if self.instrument_details_dialog_open:
+                    return
+                
+                self.instrument_details_dialog_open = True
+                try:
+                    dialog = InstrumentDetailsDialog(instrument_id, self.user_id, self.is_admin, self)
+                    dialog.show()
+                finally:
+                    self.instrument_details_dialog_open = False
 
     def load_data(self):
         """Load instruments data"""
@@ -122,12 +133,19 @@ class InstrumentsWindow(BaseDataWindow):
             QMessageBox.warning(self, 'Error', f'Failed to load instruments: {str(e)}')
 
     def add_instrument(self):
+        # Prevent multiple dialogs
+        if self.add_instrument_dialog_open:
+            return
+        
+        self.add_instrument_dialog_open = True
         try:
             dialog = AddInstrumentDialog(self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.load_data()
         except Exception as e:
             QMessageBox.critical(self, 'Error', f'Failed to add instrument: {str(e)}')
+        finally:
+            self.add_instrument_dialog_open = False
 
     def delete_selected_instrument(self):
         """Delete the selected instrument"""

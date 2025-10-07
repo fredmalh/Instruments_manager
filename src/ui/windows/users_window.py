@@ -7,6 +7,13 @@ from ..dialogs.user_details_dialog import UserDetailsDialog
 from ..dialogs.add_user_dialog import AddUserDialog
 
 class UsersWindow(BaseDataWindow):
+    def __init__(self, user_id, is_admin, db=None):
+        super().__init__(user_id, is_admin, db)
+        # Track dialog states to prevent multiple openings
+        self.add_user_dialog_open = False
+        self.edit_user_dialog_open = False
+        self.init_ui()
+
     def init_ui(self):
         super().init_ui()
 
@@ -77,15 +84,31 @@ class UsersWindow(BaseDataWindow):
             QMessageBox.warning(self, 'Error', f'Failed to load users: {str(e)}')
 
     def add_user(self):
-        dialog = AddUserDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.load_data()
+        # Prevent multiple dialogs
+        if self.add_user_dialog_open:
+            return
+        
+        self.add_user_dialog_open = True
+        try:
+            dialog = AddUserDialog(self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.load_data()
+        finally:
+            self.add_user_dialog_open = False
 
     def edit_user(self, user_id):
         """Edit an existing user"""
-        dialog = UserDetailsDialog(user_id, self.user_id, self.is_admin, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.load_data()
+        # Prevent multiple dialogs
+        if self.edit_user_dialog_open:
+            return
+        
+        self.edit_user_dialog_open = True
+        try:
+            dialog = UserDetailsDialog(user_id, self.user_id, self.is_admin, self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.load_data()
+        finally:
+            self.edit_user_dialog_open = False
 
     def edit_selected_user(self):
         """Edit the selected user"""

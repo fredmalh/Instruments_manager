@@ -1,10 +1,9 @@
 import sys
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                            QHBoxLayout, QPushButton, QLabel, QLineEdit, QMessageBox)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
+                            QLabel, QLineEdit, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from database import Database
-from main_menu import MainMenu
 import bcrypt
 
 class LoginWindow(QWidget):

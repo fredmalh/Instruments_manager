@@ -1,26 +1,12 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                             QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-                             QDialog, QLineEdit, QComboBox, QTextEdit, QMessageBox,
-                             QTabWidget, QFormLayout, QStackedWidget, QGroupBox,
-                             QHeaderView, QSizePolicy)
+                             QLabel, QPushButton, QMessageBox, QStackedWidget)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPalette, QColor, QFont
 from database import Database
-from datetime import datetime
 from login_window import LoginWindow
 from main_menu import MainMenu
 from src.ui.windows.instruments_window import InstrumentsWindow
 from src.ui.windows.maintenance_window import MaintenanceWindow
 from src.ui.windows.users_window import UsersWindow
-from date_utils import (
-    calculate_next_maintenance,
-    format_date_for_display,
-    format_date_for_db,
-    get_maintenance_status
-)
-from src.ui.dialogs.instrument_details_dialog import InstrumentDetailsDialog
-from src.ui.dialogs.add_instrument_dialog import AddInstrumentDialog
-from src.ui.dialogs.add_maintenance_dialog import AddMaintenanceDialog
 import sys
 
 class CentralWindow(QMainWindow):
@@ -218,67 +204,3 @@ class CentralWindow(QMainWindow):
         current_widget = self.stacked_widget.currentWidget()
         if current_widget:
             current_widget.resize(self.size())
-
-    def delete_user(self):
-        """Delete the selected user"""
-        try:
-            # Get selected row
-            selected_items = self.users_table.selectedItems()
-            if not selected_items:
-                QMessageBox.warning(self, 'Warning', 'Please select a user to delete')
-                return
-            
-            # Get the row index of the first selected item
-            row = selected_items[0].row()
-            user_id = self.users_table.item(row, 0).text()
-            username = self.users_table.item(row, 1).text()
-            
-            # Check if user is responsible for any instruments
-            cursor = self.db.conn.cursor()
-            cursor.execute("""
-                SELECT COUNT(*) as count 
-                FROM instruments 
-                WHERE responsible_user_id = ?
-            """, (user_id,))
-            result = cursor.fetchone()
-            
-            if result['count'] > 0:
-                # Get list of instruments where user is responsible
-                cursor.execute("""
-                    SELECT name 
-                    FROM instruments 
-                    WHERE responsible_user_id = ?
-                """, (user_id,))
-                instruments = cursor.fetchall()
-                instrument_list = "\n".join([f"- {inst['name']}" for inst in instruments])
-                
-                QMessageBox.warning(
-                    self, 
-                    'Cannot Delete User',
-                    f'Cannot delete user {username} because they are responsible for the following instruments:\n\n'
-                    f'{instrument_list}\n\n'
-                    'Please reassign these instruments to another user before deleting.'
-                )
-                return
-            
-            # Confirm deletion
-            reply = QMessageBox.question(
-                self, 'Confirm Deletion',
-                f'Are you sure you want to delete user {username}?',
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
-            
-            if reply == QMessageBox.StandardButton.Yes:
-                # Delete user
-                cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
-                self.db.conn.commit()
-                
-                # Refresh users table
-                self.load_users()
-                
-                QMessageBox.information(self, 'Success', f'User {username} deleted successfully')
-                
-        except Exception as e:
-            self.db.conn.rollback()
-            QMessageBox.warning(self, 'Error', f'Failed to delete user: {str(e)}') 
