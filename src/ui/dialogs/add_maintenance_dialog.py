@@ -29,16 +29,19 @@ class AddMaintenanceDialog(BaseDialog):
         self.date_input.setCalendarPopup(True)
         self.date_input.setDate(QDate.currentDate())
         self.date_input.setDisplayFormat("yyyy-MM-dd")  # Set YYYY-MM-DD format
+        self.performed_by_input = QComboBox()
         self.notes_input = QTextEdit()
         self.notes_input.setMaximumHeight(100)
 
         # Add fields to form
         form_layout.addRow('Maintenance Type:', self.maintenance_type_input)
         form_layout.addRow('Date:', self.date_input)
+        form_layout.addRow('Performed By:', self.performed_by_input)
         form_layout.addRow('Notes:', self.notes_input)
 
         # Load data into combo boxes
         self.load_maintenance_types()
+        self.load_users()
 
         # Add form layout to main layout
         main_layout.addLayout(form_layout)
@@ -71,6 +74,31 @@ class AddMaintenanceDialog(BaseDialog):
                 
         except Exception as e:
             self.show_error('Error', f'Failed to load maintenance types: {str(e)}')
+
+    def load_users(self):
+        """Load users into the performed_by dropdown"""
+        try:
+            cursor = self.db.conn.cursor()
+            cursor.execute("SELECT id, username FROM users ORDER BY username")
+            users = cursor.fetchall()
+            
+            self.performed_by_input.clear()
+            current_user_id = None
+            
+            for user in users:
+                self.performed_by_input.addItem(user['username'], user['id'])
+                # Find the current user to set as default
+                if user['id'] == self.user_id:
+                    current_user_id = user['id']
+            
+            # Set current user as default selection
+            if current_user_id:
+                index = self.performed_by_input.findData(current_user_id)
+                if index >= 0:
+                    self.performed_by_input.setCurrentIndex(index)
+                
+        except Exception as e:
+            self.show_error('Error', f'Failed to load users: {str(e)}')
 
     def _get_maintenance_data_for_pdf(self, maintenance_id):
         """Get all necessary data for PDF generation"""
@@ -184,7 +212,7 @@ class AddMaintenanceDialog(BaseDialog):
                 self.instrument_id,
                 self.maintenance_type_input.currentData(),
                 maintenance_date,
-                self.user_id,
+                self.performed_by_input.currentData(),
                 self.notes_input.toPlainText()
             ))
             

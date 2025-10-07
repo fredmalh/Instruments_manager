@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QFormLayout, QLineEdit, QComboBox, 
                              QDialog, QPushButton, QVBoxLayout, QHBoxLayout, QLabel,
-                             QCheckBox, QApplication)
+                             QApplication)
 from ..base.base_dialog import BaseDialog
 import bcrypt
 
@@ -58,16 +58,18 @@ class AddUserDialog(BaseDialog):
         self.confirm_password_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.confirm_password_input.setMinimumWidth(200)
         
-        self.is_admin_checkbox = QCheckBox()
-        self.is_admin_checkbox.setObjectName("is_admin_checkbox")
-        self.is_admin_checkbox.setStyleSheet("QCheckBox { color: white; }")
+        self.user_type_input = QComboBox()
+        self.user_type_input.setObjectName("user_type_input")
+        self.user_type_input.addItem("Normal User", False)
+        self.user_type_input.addItem("Admin", True)
+        self.user_type_input.setMinimumWidth(200)
 
         # Add fields to form
         form_layout.addRow('Username:', self.username_input)
         form_layout.addRow('Email:', self.email_input)
         form_layout.addRow('Password:', self.password_input)
         form_layout.addRow('Confirm Password:', self.confirm_password_input)
-        form_layout.addRow('Admin:', self.is_admin_checkbox)
+        form_layout.addRow('User Type:', self.user_type_input)
 
         # Add layouts to main layout
         main_layout.addLayout(form_layout)
@@ -129,7 +131,7 @@ class AddUserDialog(BaseDialog):
                 self.username_input.text(),
                 self.email_input.text(),
                 self.hash_password(self.password_input.text()),
-                self.is_admin_checkbox.isChecked()
+                self.user_type_input.currentData()
             ))
             
             self.db.conn.commit()

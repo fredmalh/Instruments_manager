@@ -1,11 +1,11 @@
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox, QHeaderView, QDialog)
+from PyQt6.QtWidgets import (QPushButton, QLabel, QTableWidgetItem, 
+                            QMessageBox, QDialog)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QBrush, QColor
-from ..base.base_data_window import BaseDataWindow
-from ..base.base_table import BaseTable
 from database import Database
 from datetime import datetime
-from date_utils import format_date_for_display, get_maintenance_status
+from ..base.base_data_window import BaseDataWindow
+from ..base.base_table import BaseTable
 from ..dialogs.instrument_details_dialog import InstrumentDetailsDialog
 from ..dialogs.add_instrument_dialog import AddInstrumentDialog
 
@@ -26,7 +26,7 @@ class InstrumentsWindow(BaseDataWindow):
         self.table = BaseTable()
         self.table.set_headers([
             'Instrument', 'Brand', 'Model', 'Serial Number', 'Location', 
-            'Status', 'Responsible User', 'Next Maintenance'
+            'Status', 'Responsible User'
         ])
         
         # Connect cell click event
@@ -72,15 +72,8 @@ class InstrumentsWindow(BaseDataWindow):
         """Load instruments data"""
         try:
             cursor = self.db.conn.cursor()
+            
             cursor.execute("""
-                WITH maintenance_dates AS (
-                    SELECT 
-                        instrument_id,
-                        maintenance_type_id,
-                        MAX(maintenance_date) as last_date
-                    FROM maintenance_records
-                    GROUP BY instrument_id, maintenance_type_id
-                )
                 SELECT 
                     i.id,
                     i.name,           -- Instrument
@@ -89,52 +82,41 @@ class InstrumentsWindow(BaseDataWindow):
                     i.serial_number,  -- Serial Number
                     i.location,       -- Location
                     i.status,         -- Status
-                    u.username as responsible_user,  -- Responsible User
-                    CASE 
-                        WHEN i.maintenance_1 IS NOT NULL AND i.period_1 IS NOT NULL THEN
-                            CASE 
-                                WHEN md1.last_date IS NULL THEN
-                                    date(i.date_start_operating)
-                                ELSE
-                                    date(md1.last_date, '+' || (i.period_1 * 7) || ' days')
-                            END
-                        ELSE NULL
-                    END as next_maintenance  -- Next Maintenance
+                    u.username as responsible_user  -- Responsible User
                 FROM instruments i
                 LEFT JOIN users u ON i.responsible_user_id = u.id
-                LEFT JOIN maintenance_dates md1 ON i.id = md1.instrument_id AND i.maintenance_1 = md1.maintenance_type_id
-                ORDER BY i.name
+                ORDER BY i.name COLLATE NOCASE
             """)
             
-            self.table.clear_table()
+            raw_results = cursor.fetchall()
             
-            for instrument in cursor.fetchall():
-                # Create items for each column
-                items = []
-                for col, value in enumerate([
-                    instrument['name'],  # Instrument
-                    instrument['brand'],  # Brand
-                    instrument['model'],  # Model
-                    instrument['serial_number'],  # Serial Number
-                    instrument['location'],  # Location
-                    instrument['status'],  # Status
-                    instrument['responsible_user'] or 'Not Assigned',  # Responsible User
-                    format_date_for_display(instrument['next_maintenance']) if instrument['next_maintenance'] else 'Not Scheduled'  # Next Maintenance
-                ]):
-                    item = QTableWidgetItem(str(value))
-                    if col == 0:  # First column (Instrument name)
-                        item.setForeground(QBrush(QColor("#4a9eff")))  # Light blue color for hyperlink
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make item read-only
-                    items.append(item)
-                
-                # Add row with items
-                row = self.table.rowCount()
-                self.table.insertRow(row)
-                for col, item in enumerate(items):
-                    self.table.setItem(row, col, item)
-                
-                # Store the instrument ID in the first column
-                self.table.item(row, 0).setData(Qt.ItemDataRole.UserRole, instrument['id'])
+            # Prepare data for the new helper method
+            instruments_data = []
+            for instrument in raw_results:
+                instruments_data.append({
+                    'id': instrument['id'],
+                    'name': instrument['name'],
+                    'brand': instrument['brand'],
+                    'model': instrument['model'],
+                    'serial_number': instrument['serial_number'],
+                    'location': instrument['location'],
+                    'status': instrument['status'],
+                    'responsible_user': instrument['responsible_user'] or 'Not Assigned'
+                })
+            
+            # Define column configuration for consistent formatting
+            column_configs = [
+                {'key': 'name', 'color': '#4a9eff', 'is_clickable': True},  # Instrument name - blue and clickable
+                {'key': 'brand'},  # Brand
+                {'key': 'model'},  # Model
+                {'key': 'serial_number'},  # Serial Number
+                {'key': 'location'},  # Location
+                {'key': 'status'},  # Status
+                {'key': 'responsible_user'}  # Responsible User
+            ]
+            
+            # Use the new helper method to populate the table
+            self.table.populate_table(instruments_data, column_configs)
             
         except Exception as e:
             QMessageBox.warning(self, 'Error', f'Failed to load instruments: {str(e)}')

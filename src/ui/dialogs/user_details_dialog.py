@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QFormLayout, QLineEdit, QComboBox, 
                              QDialog, QPushButton, QVBoxLayout, QHBoxLayout, QLabel,
-                             QCheckBox, QMessageBox, QApplication)
+                             QMessageBox, QApplication)
 from ..base.base_dialog import BaseDialog
 import bcrypt
 from database import Database
@@ -66,16 +66,18 @@ class UserDetailsDialog(BaseDialog):
         self.confirm_password_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.confirm_password_input.setMinimumWidth(200)
         
-        self.is_admin_checkbox = QCheckBox()
-        self.is_admin_checkbox.setObjectName("is_admin_checkbox")
-        self.is_admin_checkbox.setStyleSheet("QCheckBox { color: white; }")
+        self.user_type_input = QComboBox()
+        self.user_type_input.setObjectName("user_type_input")
+        self.user_type_input.addItem("Normal User", False)
+        self.user_type_input.addItem("Admin", True)
+        self.user_type_input.setMinimumWidth(200)
 
         # Add fields to form with better organization
         form_layout.addRow('Username:', self.username_input)
         form_layout.addRow('Email:', self.email_input)
         form_layout.addRow('Password:', self.password_input)
         form_layout.addRow('Confirm Password:', self.confirm_password_input)
-        form_layout.addRow('Admin:', self.is_admin_checkbox)
+        form_layout.addRow('User Type:', self.user_type_input)
 
         # Add form layout to main layout
         main_layout.addLayout(form_layout)
@@ -94,7 +96,7 @@ class UserDetailsDialog(BaseDialog):
 
         # Set fields as read-only if user can't edit
         if not can_edit:
-            for widget in self.findChildren((QLineEdit, QCheckBox)):
+            for widget in self.findChildren((QLineEdit, QComboBox)):
                 widget.setEnabled(False)
 
     def load_user_data(self):
@@ -106,7 +108,11 @@ class UserDetailsDialog(BaseDialog):
             if user:
                 self.username_input.setText(user['username'])
                 self.email_input.setText(user['email'])
-                self.is_admin_checkbox.setChecked(bool(user['is_admin']))
+                # Set the dropdown to the correct user type
+                if user['is_admin']:
+                    self.user_type_input.setCurrentIndex(1)  # Admin
+                else:
+                    self.user_type_input.setCurrentIndex(0)  # Normal User
                 
                 # Clear password fields and set placeholder
                 self.password_input.clear()
@@ -200,7 +206,7 @@ class UserDetailsDialog(BaseDialog):
                     self.username_input.text(),
                     self.email_input.text(),
                     self.hash_password(self.password_input.text()),
-                    self.is_admin_checkbox.isChecked(),
+                    self.user_type_input.currentData(),
                     self.user_id
                 ))
             else:
@@ -211,7 +217,7 @@ class UserDetailsDialog(BaseDialog):
                 """, (
                     self.username_input.text(),
                     self.email_input.text(),
-                    self.is_admin_checkbox.isChecked(),
+                    self.user_type_input.currentData(),
                     self.user_id
                 ))
             
