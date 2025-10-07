@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox, QHeaderView, QDialog)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QBrush, QColor
 from ..base.base_data_window import BaseDataWindow
 from ..base.base_table import BaseTable
 from database import Database
@@ -123,7 +123,7 @@ class InstrumentsWindow(BaseDataWindow):
                 ]):
                     item = QTableWidgetItem(str(value))
                     if col == 0:  # First column (Instrument name)
-                        item.setForeground(Qt.GlobalColor.blue)  # Set text color to blue
+                        item.setForeground(QBrush(QColor("#4a9eff")))  # Light blue color for hyperlink
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make item read-only
                     items.append(item)
                 

@@ -23,6 +23,7 @@ class InstrumentDetailsDialog(QDialog):
         self.is_admin = is_admin
         self.db = Database()
         self.original_maintenance_data = {}  # Store original data for comparison
+        self.is_editing = False  # Track if dialog is in edit mode
         self.init_ui()
         self.apply_dark_theme()
         self.load_instrument_data()
@@ -245,7 +246,7 @@ class InstrumentDetailsDialog(QDialog):
         # Connect button signals
         self.edit_button.clicked.connect(lambda: self.set_edit_mode(True))
         self.save_button.clicked.connect(self.save_changes)
-        self.cancel_button.clicked.connect(lambda: self.set_edit_mode(False))
+        self.cancel_button.clicked.connect(self.cancel_changes)
         
         if self.is_admin:
             add_maintenance_button = QPushButton('Add Maintenance Record')
@@ -255,7 +256,7 @@ class InstrumentDetailsDialog(QDialog):
 
         close_button = QPushButton('Close')
         close_button.setFixedWidth(button_width)
-        close_button.clicked.connect(self.accept)
+        close_button.clicked.connect(self.handle_close)
         button_layout.addWidget(close_button)
 
         # Add edit/save/cancel buttons
@@ -266,6 +267,9 @@ class InstrumentDetailsDialog(QDialog):
         layout.addLayout(button_layout)
 
     def set_edit_mode(self, edit_mode):
+        # Track editing state
+        self.is_editing = edit_mode
+        
         # Enable/disable editing of fields
         self.name_input.setReadOnly(not edit_mode)
         self.model_input.setReadOnly(not edit_mode)
@@ -295,8 +299,159 @@ class InstrumentDetailsDialog(QDialog):
         self.save_button.setVisible(edit_mode)
         self.cancel_button.setVisible(edit_mode)
 
+    def cancel_changes(self):
+        """Cancel changes and restore original values"""
+        try:
+            # Ask for confirmation before discarding changes
+            reply = QMessageBox.question(
+                self, 'Cancel Changes',
+                'Are you sure you want to cancel all changes?\n\nAll unsaved modifications will be lost.',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Reload data from database to restore original values
+                self.load_instrument_data()
+                # Return to read-only mode
+                self.set_edit_mode(False)
+                print("DEBUG: Changes cancelled, original values restored")
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', f'Failed to cancel changes: {str(e)}')
+
+    def closeEvent(self, event):
+        """Handle dialog closing with unsaved changes protection"""
+        if self.is_editing:
+            reply = QMessageBox.question(
+                self, 'Unsaved Changes',
+                'You have unsaved changes. What would you like to do?',
+                QMessageBox.StandardButton.Save | 
+                QMessageBox.StandardButton.Discard | 
+                QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save
+            )
+            
+            if reply == QMessageBox.StandardButton.Save:
+                # Validate fields first
+                validation_error = self.validate_fields()
+                if validation_error:
+                    QMessageBox.warning(self, 'Error', validation_error)
+                    event.ignore()  # Don't close the dialog
+                else:
+                    # Validation passed, save and close
+                    try:
+                        self.save_changes()
+                        event.accept()  # Close the dialog
+                    except Exception as e:
+                        QMessageBox.warning(self, 'Error', f'Failed to save changes: {str(e)}')
+                        event.ignore()  # Don't close the dialog
+            elif reply == QMessageBox.StandardButton.Discard:
+                # Discard changes and close
+                event.accept()
+            else:  # Cancel
+                # Don't close the dialog
+                event.ignore()
+        else:
+            # Not editing, safe to close
+            event.accept()
+
+    def handle_close(self):
+        """Handle Close button click with unsaved changes protection"""
+        if self.is_editing:
+            reply = QMessageBox.question(
+                self, 'Unsaved Changes',
+                'You have unsaved changes. What would you like to do?',
+                QMessageBox.StandardButton.Save | 
+                QMessageBox.StandardButton.Discard | 
+                QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save
+            )
+            
+            if reply == QMessageBox.StandardButton.Save:
+                # Validate fields first
+                validation_error = self.validate_fields()
+                if validation_error:
+                    QMessageBox.warning(self, 'Error', validation_error)
+                    # Don't close the dialog
+                else:
+                    # Validation passed, save and close
+                    try:
+                        self.save_changes()
+                        self.accept()  # Close the dialog
+                    except Exception as e:
+                        QMessageBox.warning(self, 'Error', f'Failed to save changes: {str(e)}')
+                        # Don't close the dialog
+            elif reply == QMessageBox.StandardButton.Discard:
+                # Discard changes and close
+                self.accept()
+            # If Cancel, do nothing (don't close)
+        else:
+            # Not editing, safe to close
+            self.accept()
+
+    def validate_fields(self):
+        """Validate all fields and return error message if validation fails"""
+        # Get current values
+        name = self.name_input.text().strip()
+        model = self.model_input.text().strip()
+        serial = self.serial_input.text().strip()
+        location = self.location_input.text().strip()
+        brand = self.brand_input.text().strip()
+        date_start = self.date_start_input.text().strip()
+        
+        # Get maintenance periods
+        period1 = self.period1_input.text().strip()
+        period2 = self.period2_input.text().strip()
+        period3 = self.period3_input.text().strip()
+
+        # Debug: Show all field values
+        print(f"DEBUG: Field values being validated:")
+        print(f"  - name: '{name}'")
+        print(f"  - model: '{model}'")
+        print(f"  - serial: '{serial}'")
+        print(f"  - location: '{location}'")
+        print(f"  - brand: '{brand}'")
+        print(f"  - date_start: '{date_start}'")
+
+        # Validate required fields (only check essential instrument fields)
+        required_fields = [name, model, serial, location, brand, date_start]
+        if not all(required_fields):
+            missing_fields = []
+            if not name: missing_fields.append("Name")
+            if not model: missing_fields.append("Model")
+            if not serial: missing_fields.append("Serial Number")
+            if not location: missing_fields.append("Location")
+            if not brand: missing_fields.append("Brand")
+            if not date_start: missing_fields.append("Date Start Operating")
+            
+            print(f"DEBUG: Missing required fields: {missing_fields}")
+            return f'Please fill all required fields: {", ".join(missing_fields)}'
+
+        # Validate date format
+        if not validate_date_format(date_start):
+            return f'Please enter date in YYYY-MM-DD format. You entered: "{date_start}"'
+
+        # Validate maintenance periods
+        try:
+            if period1:
+                int(period1)
+            if period2:
+                int(period2)
+            if period3:
+                int(period3)
+        except ValueError:
+            return 'Please enter valid numbers for maintenance periods'
+        
+        return None  # No validation errors
+
     def save_changes(self):
         try:
+            # Validate fields first
+            validation_error = self.validate_fields()
+            if validation_error:
+                QMessageBox.warning(self, 'Error', validation_error)
+                raise ValueError(validation_error)
+
             # Get current values
             name = self.name_input.text().strip()
             model = self.model_input.text().strip()
@@ -315,27 +470,13 @@ class InstrumentDetailsDialog(QDialog):
             period2 = self.period2_input.text().strip()
             period3 = self.period3_input.text().strip()
 
-            # Validate required fields
-            if not all([name, model, serial, location, brand, date_start]):
-                QMessageBox.warning(self, 'Error', 'Please fill all required fields')
-                return
-
-            # Validate date format
-            if not validate_date_format(date_start):
-                QMessageBox.warning(self, 'Error', f'Please enter date in YYYY-MM-DD format. You entered: "{date_start}"')
-                return
-
-            # Validate maintenance periods
-            try:
-                if period1:
-                    period1 = int(period1)
-                if period2:
-                    period2 = int(period2)
-                if period3:
-                    period3 = int(period3)
-            except ValueError:
-                QMessageBox.warning(self, 'Error', 'Please enter valid numbers for maintenance periods')
-                return
+            # Convert periods to integers (validation already passed)
+            if period1:
+                period1 = int(period1)
+            if period2:
+                period2 = int(period2)
+            if period3:
+                period3 = int(period3)
 
             # Start transaction
             cursor = self.db.conn.cursor()
