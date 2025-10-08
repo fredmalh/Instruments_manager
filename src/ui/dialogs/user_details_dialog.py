@@ -79,6 +79,16 @@ class UserDetailsDialog(BaseDialog):
         form_layout.addRow('Confirm Password:', self.confirm_password_input)
         form_layout.addRow('User Type:', self.user_type_input)
 
+        # Hide User Type field when user is editing their own profile (non-admin)
+        if self.user_id == self.current_user_id and not self.is_admin:
+            self.user_type_input.setVisible(False)
+            # Also hide the label by finding it in the form layout
+            for i in range(form_layout.rowCount()):
+                item = form_layout.itemAt(i, QFormLayout.ItemRole.LabelRole)
+                if item and item.widget() and item.widget().text() == 'User Type:':
+                    item.widget().setVisible(False)
+                    break
+
         # Add form layout to main layout
         main_layout.addLayout(form_layout)
 
@@ -197,6 +207,15 @@ class UserDetailsDialog(BaseDialog):
                 return
 
             # Prepare update query
+            # Get user type - use current data if field is visible, otherwise preserve existing admin status
+            if self.user_type_input.isVisible():
+                user_type = self.user_type_input.currentData()
+            else:
+                # When editing own profile, preserve existing admin status
+                cursor.execute("SELECT is_admin FROM users WHERE id = ?", (self.user_id,))
+                existing_user = cursor.fetchone()
+                user_type = existing_user['is_admin'] if existing_user else False
+            
             if self.password_input.text():
                 # Update with new password
                 cursor.execute("""
@@ -206,7 +225,7 @@ class UserDetailsDialog(BaseDialog):
                     self.username_input.text(),
                     self.email_input.text(),
                     self.hash_password(self.password_input.text()),
-                    self.user_type_input.currentData(),
+                    user_type,
                     self.user_id
                 ))
             else:
@@ -217,7 +236,7 @@ class UserDetailsDialog(BaseDialog):
                 """, (
                     self.username_input.text(),
                     self.email_input.text(),
-                    self.user_type_input.currentData(),
+                    user_type,
                     self.user_id
                 ))
             

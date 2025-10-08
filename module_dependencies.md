@@ -65,7 +65,6 @@
       │               │      │base_data_window │
       │               │      │base_dialog      │
       │               │      │base_table       │
-      │               │      │base_window      │
       │               │      └─────────────────┘
       │               │
       │               ▼
@@ -88,7 +87,7 @@
       ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  PyQt6 (GUI Framework)  │  sqlite3 (Database)  │  bcrypt (Password Hashing)   │
-│  reportlab (PDF)        │  datetime (Dates)    │  os, sys (System)           │
+│  reportlab (PDF)        │  datetime (Dates)    │  os, sys, signal (System)   │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -115,10 +114,9 @@
 - **`user_details_dialog.py`** - User details and management
 
 ### Base Classes (`src/ui/base/`)
-- **`base_data_window.py`** - Base class for data management windows
-- **`base_dialog.py`** - Base class for dialog windows
-- **`base_table.py`** - Base class for table widgets
-- **`base_window.py`** - Base class for main windows
+- **`base_data_window.py`** - Base class for data management windows (instruments, maintenance, users)
+- **`base_dialog.py`** - Base class for dialog windows with common functionality
+- **`base_table.py`** - Base class for table widgets with sorting and highlighting
 
 ### Reports (`src/reports/`)
 - **`maintenance_report.py`** - PDF report generation for maintenance records
@@ -138,9 +136,10 @@
 1. **Application Start**: `main.py` → `main_window.py`
 2. **Authentication**: `main_window.py` → `login_window.py` → `database.py`
 3. **Navigation**: `main_window.py` → `main_menu.py` → UI Windows
-4. **Data Operations**: UI Windows → `database.py`
+4. **Data Operations**: UI Windows → `database.py` (with WAL mode for concurrent access)
 5. **Reports**: UI Windows → `src/reports/` → PDF Generation
 6. **Utilities**: All modules → `date_utils.py`, `path_utils.py`
+7. **Profile Management**: `main_menu.py` → `user_details_dialog.py` (self-service editing)
 
 ## 🏗️ Architecture Patterns
 
@@ -148,3 +147,28 @@
 - **Inheritance**: Base classes provide common functionality
 - **Dependency Injection**: Database instance passed to child components
 - **Signal/Slot**: PyQt6 signals for component communication
+- **WAL Mode**: SQLite Write-Ahead Logging for concurrent database access
+- **State Management**: Dialog state tracking to prevent multiple instances
+
+## 🚀 Current Features & Improvements
+
+### Database & Concurrency
+- **WAL Mode**: Multiple users can access the application simultaneously
+- **Connection Timeout**: 30-second timeout for database operations
+- **No File Locking**: Removed file-based locking system for better performance
+
+### User Interface
+- **Self-Service Profile Editing**: Users can edit their own profiles
+- **Enhanced Permissions**: Admin-only buttons visible but locked for normal users
+- **Optimized Table Display**: Last columns size to content instead of stretching
+- **Consistent Delete Validation**: Unified selection validation across all tables
+
+### User Management
+- **Dropdown User Types**: Replaced checkboxes with user type dropdowns
+- **Password Complexity**: Enhanced password validation with uppercase requirements
+- **Performed By Selection**: Maintenance records can specify responsible person
+
+### Maintenance Operations
+- **Primary Key Deletion**: Fixed double-row deletion issue using record IDs
+- **Enhanced Maintenance Dialog**: Better user selection and validation
+- **PDF Report Generation**: Automatic PDF generation for maintenance records

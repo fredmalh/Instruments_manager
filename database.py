@@ -2,9 +2,6 @@ import sqlite3
 import bcrypt
 from datetime import datetime, timedelta
 import os
-import json
-import socket
-import time
 from pathlib import Path
 import sys
 import signal
@@ -18,8 +15,6 @@ class Database:
         
         # Set database path
         self.db_path = get_database_path()
-        self.lock_file = os.path.join(app_data_dir, 'db.lock')
-        self.lock_timeout = 30  # seconds
         
         # Register signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -33,7 +28,6 @@ class Database:
             )
         
         print(f"Database path: {self.db_path}")
-        print(f"Lock file path: {self.lock_file}")
         
         # Ensure we can write to the directory
         try:
@@ -45,95 +39,23 @@ class Database:
         except Exception as e:
             print(f"Warning: Cannot write to directory: {e}")
             
-        self.acquire_lock()
-        self.conn = sqlite3.connect(self.db_path)
+        # Connect to database with WAL mode for concurrent access
+        self.conn = sqlite3.connect(self.db_path, timeout=30.0)
         self.conn.row_factory = sqlite3.Row
+        
+        # Enable WAL mode for better concurrent access
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
+        self.conn.execute("PRAGMA busy_timeout=30000")  # 30 second timeout
+        
         self.has_unsaved_changes = False
 
     def _signal_handler(self, signum, frame):
         """Handle system signals for graceful shutdown"""
         print(f"Received signal {signum}, cleaning up...")
-        self.release_lock()
         if hasattr(self, 'conn'):
             self.conn.close()
         sys.exit(0)
-
-    def acquire_lock(self):
-        """Try to acquire a lock on the database file"""
-        print(f"Attempting to acquire lock...")
-        start_time = time.time()
-        
-        # First, try to remove any existing lock file
-        try:
-            if os.path.exists(self.lock_file):
-                print(f"Found existing lock file, attempting to remove...")
-                os.remove(self.lock_file)
-                print("Existing lock file removed")
-        except Exception as e:
-            print(f"Warning: Could not remove existing lock file: {e}")
-        
-        while time.time() - start_time < self.lock_timeout:
-            try:
-                if os.path.exists(self.lock_file):
-                    print(f"Lock file exists at: {self.lock_file}")
-                    try:
-                        with open(self.lock_file, 'r') as f:
-                            lock_data = json.load(f)
-                            current_user = lock_data.get('username', 'Unknown')
-                            hostname = lock_data.get('hostname', 'Unknown')
-                            timestamp = lock_data.get('timestamp', '')
-                            print(f"Lock file contents: {lock_data}")
-                            
-                            # Check if the lock is stale (older than 1 minute)
-                            if timestamp:
-                                lock_time = datetime.fromisoformat(timestamp)
-                                if (datetime.now() - lock_time).total_seconds() > 60:  # 1 minute
-                                    print(f"Removing stale lock from {current_user} on {hostname}")
-                                    os.remove(self.lock_file)
-                                    continue
-                    except Exception as e:
-                        print(f"Error reading lock file: {e}")
-                        # If we can't read the lock file, try to remove it
-                        try:
-                            os.remove(self.lock_file)
-                            print("Removed unreadable lock file")
-                            continue
-                        except:
-                            pass
-                        
-                    raise Exception(
-                        f"The database is currently in use by {current_user} on {hostname}.\n\n"
-                        "Please wait until they finish or ask them to close the application.\n"
-                        "If you believe this is an error, you can delete the 'db.lock' file."
-                    )
-                
-                # Create lock file with current user info
-                lock_data = {
-                    'username': os.getenv('USERNAME', 'Unknown'),
-                    'hostname': socket.gethostname(),
-                    'timestamp': datetime.now().isoformat()
-                }
-                print(f"Creating new lock file with data: {lock_data}")
-                with open(self.lock_file, 'w') as f:
-                    json.dump(lock_data, f)
-                print("Lock acquired successfully")
-                return True
-            except Exception as e:
-                if "The database is currently in use" in str(e):
-                    raise e
-                print(f"Error during lock acquisition: {e}")
-                time.sleep(1)
-        raise Exception("Could not acquire database lock after timeout")
-
-    def release_lock(self):
-        """Release the lock on the database file"""
-        try:
-            if os.path.exists(self.lock_file):
-                print(f"Releasing lock file: {self.lock_file}")
-                os.remove(self.lock_file)
-                print("Lock released successfully")
-        except Exception as e:
-            print(f"Error releasing lock: {e}")
 
     def verify_user(self, username, password):
         cursor = self.conn.cursor()
@@ -172,66 +94,11 @@ class Database:
         self.has_unsaved_changes = True
         return True
 
-    def get_maintenance_history(self, instrument_id):
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT mr.*, u.username, mt.name as maintenance_type
-            FROM maintenance_records mr
-            JOIN users u ON mr.performed_by = u.id
-            JOIN maintenance_types mt ON mr.maintenance_type_id = mt.id
-            WHERE mr.instrument_id = ?
-            ORDER BY mr.maintenance_date DESC
-        """, (instrument_id,))
-        return cursor.fetchall()
-
     def save_changes(self):
         """Save any pending changes to the database"""
         if self.has_unsaved_changes:
             self.conn.commit()
             self.has_unsaved_changes = False
-
-    def get_upcoming_maintenance(self, days=28):
-        """Get maintenance operations due in the next specified number of days"""
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT 
-                i.id, i.name, i.model, i.serial_number, i.location,
-                mt.name as maintenance_type,
-                ims.period_days,
-                COALESCE(
-                    (SELECT MAX(maintenance_date)
-                     FROM maintenance_records mr
-                     WHERE mr.instrument_id = i.id
-                     AND mr.maintenance_type_id = mt.id),
-                    'Never'
-                ) as last_maintenance,
-                CASE
-                    WHEN COALESCE(
-                        (SELECT MAX(maintenance_date)
-                         FROM maintenance_records mr
-                         WHERE mr.instrument_id = i.id
-                         AND mr.maintenance_type_id = mt.id),
-                        '2000-01-01'
-                    ) = 'Never' THEN
-                        DATE('now')
-                    ELSE
-                        DATE(
-                            (SELECT MAX(maintenance_date)
-                             FROM maintenance_records mr
-                             WHERE mr.instrument_id = i.id
-                             AND mr.maintenance_type_id = mt.id),
-                            '+' || ims.period_days || ' days'
-                        )
-                END as next_maintenance,
-                u.username as responsible_user
-            FROM instruments i
-            JOIN instrument_maintenance_schedule ims ON i.id = ims.instrument_id
-            JOIN maintenance_types mt ON ims.maintenance_type_id = mt.id
-            JOIN users u ON i.responsible_user_id = u.id
-            WHERE DATE(ims.maintenance_date, '+' || ims.period_days || ' days') <= DATE('now', '+' || ? || ' days')
-            ORDER BY next_maintenance ASC
-        """, (days,))
-        return cursor.fetchall()
 
     def get_instrument_details(self, instrument_id):
         """Get detailed information about an instrument including maintenance schedule"""

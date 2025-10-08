@@ -7,7 +7,7 @@ This folder contains stable releases of the Lab Instrument Manager application.
 releases/
 ├── README.md              # This file
 ├── v1.0.0/               # Version 1.0.0 release
-│   ├── main.exe          # Application executable
+│   ├── Lab_Instruments_Manager.exe          # Application executable
 │   ├── lab_instruments.db # Database file
 │   └── README.md         # Release-specific documentation
 └── [future versions...]
@@ -33,7 +33,7 @@ releases/
 
 4. **Copy Release Files:**
    ```bash
-   copy dist\main.exe releases\v[version]\
+   copy dist\Lab_Instruments_Manager.exe releases\v[version]\
    copy dist\lab_instruments.db releases\v[version]\
    ```
 

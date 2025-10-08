@@ -30,7 +30,7 @@ def build_application():
     ])
     
     # Verify the executable was created
-    exe_path = os.path.join(dist_dir, 'main.exe')
+    exe_path = os.path.join(dist_dir, 'Lab_Instruments_Manager.exe')
     if os.path.exists(exe_path):
         print(f"Application built successfully at: {exe_path}")
     else:
@@ -41,7 +41,7 @@ def build_application():
     print(f"Application is in: {dist_dir}")
     print("\nTo run the application:")
     print(f"1. Navigate to: {dist_dir}")
-    print("2. Run main.exe")
+    print("2. Run Lab_Instruments_Manager.exe")
     print("\nNote: The database will be created in the same directory as the executable (lab_instruments.db)")
 
 if __name__ == "__main__":

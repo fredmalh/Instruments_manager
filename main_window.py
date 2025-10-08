@@ -183,7 +183,6 @@ class CentralWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             # Close database connection and release lock
             if hasattr(self, 'db') and self.db:
-                self.db.release_lock()  # Release the database lock
                 self.db.conn.close()
             event.accept()
         else:

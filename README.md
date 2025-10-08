@@ -22,11 +22,13 @@ No need to have python installed to use them
 
 ## Default Users
 ### Administrators
-- Username: admin1, Password: admin111
-- Username: admin2, Password: admin222
+- Username: admin1, Password: Admin11111
+- Username: admin2, Password: Admin22222
 
 
 ### Normal Users
-- Username: user1, Password: user111
-- Username: user2, Password: user222
-- Username: user3, Password: user333
+- Username: user1, Password: User11111
+- Username: user2, Password: User22222
+- Username: user3, Password: User33333
+- Username: user4, Password: User44444
+- Username: user5, Password: User55555

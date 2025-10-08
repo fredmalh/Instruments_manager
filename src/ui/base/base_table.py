@@ -158,7 +158,8 @@ class BaseTable(QTableWidget):
         self.setColumnCount(len(headers))
         self.setHorizontalHeaderLabels(headers)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.horizontalHeader().setStretchLastSection(True)
+        # Set last column to also size to content instead of stretching
+        self.horizontalHeader().setStretchLastSection(False)
 
     def create_clickable_label(self, text, callback):
         """Create a clickable label with consistent styling"""

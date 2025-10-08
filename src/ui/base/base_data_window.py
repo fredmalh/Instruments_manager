@@ -100,4 +100,21 @@ class BaseDataWindow(QMainWindow):
 
     def load_data(self):
         """Load data - to be overridden by subclasses"""
-        pass 
+        pass
+
+    def validate_selection_for_delete(self, table, item_name):
+        """
+        Validate that a row is selected for deletion operations
+        
+        Args:
+            table: The table widget to check for selection
+            item_name: The name of the item being deleted (e.g., 'user', 'instrument', 'maintenance record')
+            
+        Returns:
+            bool: True if selection is valid, False otherwise
+        """
+        selected_items = table.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, 'Warning', f'Please select a {item_name} to delete')
+            return False
+        return True 

@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from database import Database
+from src.ui.dialogs.user_details_dialog import UserDetailsDialog
 
 class MainMenu(QWidget):
     show_instruments_signal = pyqtSignal(int, bool)  # user_id, is_admin
@@ -76,11 +77,15 @@ class MainMenu(QWidget):
         maintenance_btn.clicked.connect(lambda: self.show_maintenance_signal.emit(self.user_id, self.is_admin))
         buttons_layout.addWidget(maintenance_btn)
 
-        # Users button (only for admins)
-        if self.is_admin:
-            users_btn = QPushButton('Users')
-            users_btn.clicked.connect(lambda: self.show_users_signal.emit(self.user_id, self.is_admin))
-            buttons_layout.addWidget(users_btn)
+        # Users button (visible to all, but access controlled)
+        users_btn = QPushButton('Users')
+        users_btn.clicked.connect(self.show_users)
+        buttons_layout.addWidget(users_btn)
+
+        # Edit Profile button (for users to edit their own profile)
+        edit_profile_btn = QPushButton('Edit Profile')
+        edit_profile_btn.clicked.connect(self.show_edit_profile)
+        buttons_layout.addWidget(edit_profile_btn)
 
         # Logout button
         logout_btn = QPushButton('Logout')
@@ -114,7 +119,12 @@ class MainMenu(QWidget):
         if self.is_admin:
             self.show_users_signal.emit(self.user_id, self.is_admin)
         else:
-            QMessageBox.warning(self, 'Access Denied', 'Only administrators can access user management.')
+            QMessageBox.warning(self, 'Access Denied', 'Only admin users can access user management.')
+
+    def show_edit_profile(self):
+        """Show edit profile dialog for the current user"""
+        dialog = UserDetailsDialog(self.user_id, self.user_id, self.is_admin, self)
+        dialog.exec()
 
     def logout(self):
         self.logout_signal.emit()

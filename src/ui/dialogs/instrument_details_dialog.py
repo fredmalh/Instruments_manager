@@ -1,16 +1,14 @@
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                             QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-                            QDialog, QLineEdit, QComboBox, QTextEdit, QMessageBox,
+                            QDialog, QLineEdit, QComboBox, QMessageBox,
                             QFormLayout, QGroupBox, QHeaderView, QSizePolicy)
-from PyQt6.QtCore import Qt, QDate
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 from database import Database
 from datetime import datetime
 from date_utils import (
     calculate_next_maintenance,
     format_date_for_display,
-    format_date_for_db,
-    get_maintenance_status,
     validate_date_format
 )
 from .add_maintenance_dialog import AddMaintenanceDialog
@@ -232,6 +230,10 @@ class InstrumentDetailsDialog(QDialog):
 
         # Buttons
         button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)  # Add 10px spacing between buttons
+        
+        # Add stretch at the beginning to center buttons
+        button_layout.addStretch()
         
         # Create edit/save/cancel buttons
         self.edit_button = QPushButton('Edit Data')
@@ -239,7 +241,8 @@ class InstrumentDetailsDialog(QDialog):
         self.cancel_button = QPushButton('Cancel')
         
         # Set fixed width for buttons
-        button_width = 200
+        button_width = 150  # Default width for most buttons
+        maintenance_button_width = 180  # Wider width for maintenance buttons
         self.edit_button.setFixedWidth(button_width)
         self.save_button.setFixedWidth(button_width)
         self.cancel_button.setFixedWidth(button_width)
@@ -249,11 +252,17 @@ class InstrumentDetailsDialog(QDialog):
         self.save_button.clicked.connect(self.save_changes)
         self.cancel_button.clicked.connect(self.cancel_changes)
         
-        if self.is_admin:
-            add_maintenance_button = QPushButton('Add Maintenance Record')
-            add_maintenance_button.setFixedWidth(button_width)
-            add_maintenance_button.clicked.connect(self.add_maintenance)
-            button_layout.addWidget(add_maintenance_button)
+        # All users can add maintenance records
+        add_maintenance_button = QPushButton('Add Maintenance Record')
+        add_maintenance_button.setFixedWidth(maintenance_button_width)
+        add_maintenance_button.clicked.connect(self.add_maintenance)
+        button_layout.addWidget(add_maintenance_button)
+
+        # Delete maintenance button (visible to all, but access controlled)
+        self.delete_maintenance_button = QPushButton('Delete Maintenance Record')
+        self.delete_maintenance_button.setFixedWidth(maintenance_button_width)
+        self.delete_maintenance_button.clicked.connect(self.delete_maintenance)
+        button_layout.addWidget(self.delete_maintenance_button)
 
         close_button = QPushButton('Close')
         close_button.setFixedWidth(button_width)
@@ -264,6 +273,9 @@ class InstrumentDetailsDialog(QDialog):
         button_layout.addWidget(self.edit_button)
         button_layout.addWidget(self.save_button)
         button_layout.addWidget(self.cancel_button)
+
+        # Add stretch at the end to center buttons
+        button_layout.addStretch()
 
         layout.addLayout(button_layout)
 
@@ -695,7 +707,7 @@ class InstrumentDetailsDialog(QDialog):
 
             # Load maintenance history
             cursor.execute("""
-                SELECT mr.maintenance_date, mt.name as type_name, u.username as performed_by, mr.notes
+                SELECT mr.id, mr.maintenance_date, mt.name as type_name, u.username as performed_by, mr.notes
                 FROM maintenance_records mr
                 JOIN maintenance_types mt ON mr.maintenance_type_id = mt.id
                 JOIN users u ON mr.performed_by = u.id
@@ -710,6 +722,7 @@ class InstrumentDetailsDialog(QDialog):
             for i, record in enumerate(history):
                 # Store original data for comparison
                 self.original_maintenance_data[i] = {
+                    'id': record['id'],
                     'date': record['maintenance_date'],
                     'type': record['type_name'],
                     'performed_by': record['performed_by'],
@@ -724,6 +737,9 @@ class InstrumentDetailsDialog(QDialog):
                 ]):
                     item = QTableWidgetItem(str(value))
                     item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                    # Store the record ID as data in the first column item
+                    if col == 0:
+                        item.setData(Qt.ItemDataRole.UserRole, record['id'])
                     self.history_table.setItem(i, col, item)
 
             # Restore column widths
@@ -763,32 +779,62 @@ class InstrumentDetailsDialog(QDialog):
         finally:
             self.add_maintenance_dialog_open = False
 
+    def validate_selection_for_delete(self, table, item_name):
+        """
+        Validate that a row is selected for deletion operations
+        
+        Args:
+            table: The table widget to check for selection
+            item_name: The name of the item being deleted (e.g., 'user', 'instrument', 'maintenance record')
+            
+        Returns:
+            bool: True if selection is valid, False otherwise
+        """
+        selected_items = table.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, 'Warning', f'Please select a {item_name} to delete')
+            return False
+        return True
+
     def delete_maintenance(self):
         """Delete the selected maintenance record"""
+        # Check if user is admin
+        if not self.is_admin:
+            QMessageBox.warning(self, 'Access Denied', 'Only admin users can delete maintenance records.')
+            return
+            
+        # Validate selection using shared method
+        if not self.validate_selection_for_delete(self.history_table, 'maintenance record'):
+            return
+            
         try:
-            # Get selected row
+            # Get selected row (we know selection exists from validation above)
             selected_rows = self.history_table.selectedItems()
-            if not selected_rows:
-                QMessageBox.warning(self, 'Warning', 'Please select a maintenance record to delete')
-                return
             
             # Get the row index of the first selected item
             row = selected_rows[0].row()
             
-            # Get the maintenance date and type from the selected row
+            # Get the record ID from the first column item's user data
+            first_column_item = self.history_table.item(row, 0)
+            if not first_column_item:
+                QMessageBox.warning(self, 'Error', 'Could not identify the selected record')
+                return
+                
+            record_id = first_column_item.data(Qt.ItemDataRole.UserRole)
+            if not record_id:
+                QMessageBox.warning(self, 'Error', 'Could not find record ID for deletion')
+                return
+            
+            # Get the display data for confirmation dialog
             date_from_table = self.history_table.item(row, 0).text()
             maint_type = self.history_table.item(row, 1).text()
-            
-            # Validate date format (should already be YYYY-MM-DD)
-            if not validate_date_format(date_from_table):
-                QMessageBox.warning(self, 'Error', f'Invalid date format: {date_from_table}')
-                return
+            performed_by = self.history_table.item(row, 2).text()
             
             # Confirm deletion
             reply = QMessageBox.question(
                 self, 'Confirm Deletion',
                 f'Are you sure you want to delete the maintenance record?\n\n'
-                f'Date: {date_from_table}\nType: {maint_type}',
+                f'Date: {date_from_table}\nType: {maint_type}\nPerformed by: {performed_by}',
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             )
@@ -796,15 +842,19 @@ class InstrumentDetailsDialog(QDialog):
             if reply == QMessageBox.StandardButton.Yes:
                 cursor = self.db.conn.cursor()
                 
-                # Delete the record (date should already be in YYYY-MM-DD format)
+                # Delete the record using the primary key (unique identification)
                 cursor.execute("""
                     DELETE FROM maintenance_records 
-                    WHERE instrument_id = ? 
-                    AND maintenance_date = ?
-                    AND maintenance_type_id = (
-                        SELECT id FROM maintenance_types WHERE name = ?
-                    )
-                """, (self.instrument_id, date_from_table, maint_type))
+                    WHERE id = ?
+                """, (record_id,))
+                
+                # Check if any rows were affected
+                if cursor.rowcount == 0:
+                    QMessageBox.warning(self, 'Error', 'No record was deleted. The record may have already been removed.')
+                    return
+                elif cursor.rowcount > 1:
+                    QMessageBox.warning(self, 'Error', f'Unexpected: {cursor.rowcount} records were deleted. This should not happen.')
+                    return
                 
                 self.db.conn.commit()
                 self.load_instrument_data()  # Refresh the data

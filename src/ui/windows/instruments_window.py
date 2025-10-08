@@ -41,13 +41,11 @@ class InstrumentsWindow(BaseDataWindow):
             {
                 'text': 'Add Instrument',
                 'callback': self.add_instrument,
-                'visible_if_admin': True,
                 'position': 'center'
             },
             {
                 'text': 'Delete Instrument',
                 'callback': self.delete_selected_instrument,
-                'visible_if_admin': True,
                 'position': 'center'
             },
             {
@@ -133,6 +131,11 @@ class InstrumentsWindow(BaseDataWindow):
             QMessageBox.warning(self, 'Error', f'Failed to load instruments: {str(e)}')
 
     def add_instrument(self):
+        # Check admin permission
+        if not self.is_admin:
+            QMessageBox.warning(self, 'Access Denied', 'Only admin users can add instruments.')
+            return
+            
         # Prevent multiple dialogs
         if self.add_instrument_dialog_open:
             return
@@ -149,31 +152,23 @@ class InstrumentsWindow(BaseDataWindow):
 
     def delete_selected_instrument(self):
         """Delete the selected instrument"""
+        # Check admin permission
+        if not self.is_admin:
+            QMessageBox.warning(self, 'Access Denied', 'Only admin users can delete instruments.')
+            return
+            
+        # Validate selection using shared method
+        if not self.validate_selection_for_delete(self.table, 'instrument'):
+            return
+            
         try:
-            # Get selected row
+            # Get selected row (we know selection exists from validation above)
             selected_items = self.table.selectedItems()
-            if not selected_items:
-                QMessageBox.warning(self, 'Warning', 'Please select an instrument to delete')
-                return
             
             # Get the row index of the first selected item
             row = selected_items[0].row()
             instrument_id = self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
             instrument_name = self.table.item(row, 0).text()
-            
-            # Check if instrument has maintenance records
-            cursor = self.db.conn.cursor()
-            cursor.execute("SELECT COUNT(*) as count FROM maintenance_records WHERE instrument_id = ?", (instrument_id,))
-            result = cursor.fetchone()
-            
-            if result['count'] > 0:
-                QMessageBox.warning(
-                    self, 
-                    'Cannot Delete Instrument',
-                    f'Cannot delete instrument "{instrument_name}" because it has maintenance records.\n\n'
-                    'Please delete all maintenance records first, or contact an administrator.'
-                )
-                return
             
             # Confirm deletion
             reply = QMessageBox.question(
@@ -185,6 +180,7 @@ class InstrumentsWindow(BaseDataWindow):
             )
             
             if reply == QMessageBox.StandardButton.Yes:
+                cursor = self.db.conn.cursor()
                 cursor.execute("DELETE FROM instruments WHERE id = ?", (instrument_id,))
                 self.db.conn.commit()
                 self.load_data()

@@ -30,19 +30,16 @@ class UsersWindow(BaseDataWindow):
             {
                 'text': 'Add User',
                 'callback': self.add_user,
-                'visible_if_admin': True,
                 'position': 'center'
             },
             {
                 'text': 'Edit User',
                 'callback': self.edit_selected_user,
-                'visible_if_admin': True,
                 'position': 'center'
             },
             {
                 'text': 'Delete User',
                 'callback': self.delete_selected_user,
-                'visible_if_admin': True,
                 'position': 'center'
             },
             {
@@ -84,6 +81,11 @@ class UsersWindow(BaseDataWindow):
             QMessageBox.warning(self, 'Error', f'Failed to load users: {str(e)}')
 
     def add_user(self):
+        # Check admin permission
+        if not self.is_admin:
+            QMessageBox.warning(self, 'Access Denied', 'Only admin users can add users.')
+            return
+            
         # Prevent multiple dialogs
         if self.add_user_dialog_open:
             return
@@ -98,6 +100,11 @@ class UsersWindow(BaseDataWindow):
 
     def edit_user(self, user_id):
         """Edit an existing user"""
+        # Check admin permission
+        if not self.is_admin:
+            QMessageBox.warning(self, 'Access Denied', 'Only admin users can edit users.')
+            return
+            
         # Prevent multiple dialogs
         if self.edit_user_dialog_open:
             return
@@ -124,12 +131,18 @@ class UsersWindow(BaseDataWindow):
 
     def delete_selected_user(self):
         """Delete the selected user"""
+        # Check admin permission
+        if not self.is_admin:
+            QMessageBox.warning(self, 'Access Denied', 'Only admin users can delete users.')
+            return
+            
+        # Validate selection using shared method
+        if not self.validate_selection_for_delete(self.table, 'user'):
+            return
+            
         try:
-            # Get selected row
+            # Get selected row (we know selection exists from validation above)
             selected_items = self.table.selectedItems()
-            if not selected_items:
-                QMessageBox.warning(self, 'Warning', 'Please select a user to delete')
-                return
             
             # Get the row index of the first selected item
             row = selected_items[0].row()
