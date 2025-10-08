@@ -24,3 +24,6 @@ previous_versions/
 
 # Allow releases folder to be committed
 !releases/
+
+# Ignore company sharing package (temporary)
+Company_Share/
