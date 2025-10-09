@@ -28,7 +28,7 @@ class MaintenanceWindow(BaseDataWindow):
         self.table.set_headers([
             'Instrument', 'Brand', 'Model', 'Serial Number', 'Location', 
             'Maintenance Type', 'Performed By', 'Last Maintenance', 
-            'Next Maintenance', 'Notes'
+            'Next Maintenance', 'Notes for the last similar maintenance operation'
         ])
         
         # Connect cell click event
